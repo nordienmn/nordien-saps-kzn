@@ -11,7 +11,7 @@
   .phone { max-width: 430px; margin: 0 auto; background: var(--bg); min-height: 100vh; }
   .top { background: var(--navy); color: #fff; padding: 52px 18px 16px; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .badge { width: 46px; height: 46px; border-radius: 10px; background: var(--gold); color: var(--navy); font-weight: 800; display: grid; place-items: center; letter-spacing: -.4px; }
+  .badge { width: 58px; height: 58px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; }
   .brand b { display: block; font-size: 22px; letter-spacing: .4px; }
   .brand span { display: block; color: #d7e2f2; font-size: 13px; margin-top: 2px; }
   .langs { display: flex; gap: 8px; margin-top: 14px; }
@@ -45,7 +45,7 @@
 <body>
 <div class="phone">
   <div class="top">
-    <div class="brand"><div class="badge">SAPS</div><div><b id="t-title">SAPS KZN</b><span id="t-sub">South African Police Service · KwaZulu-Natal</span></div></div>
+    <div class="brand"><img class="badge" alt="SAPS" src="/static/badge.png" /><div><b id="t-title">SAPS KZN</b><span id="t-sub">South African Police Service · KwaZulu-Natal</span></div></div>
     <div class="langs">
       <button id="en" class="on" type="button" onclick="setLang('en')">English</button>
       <button id="zu" type="button" onclick="setLang('zu')">isiZulu</button>
