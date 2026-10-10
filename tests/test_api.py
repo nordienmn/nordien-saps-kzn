@@ -700,3 +700,16 @@ def test_anonymous_tip_and_unsafe_place_and_weather_help_all_go_through_when_inc
     assert sos.status_code == 200
     login(client, section="tip_line")
     assert any(x["incomplete"] for x in client.get("/api/staff/feed").json["tips"])
+
+
+def test_home_screen_icons_and_weather_cover(client):
+    """The app installs with the SAPS badge. The weather cover must never show it."""
+    page = client.get("/citizen").get_data(as_text=True)
+    assert "manifest-saps.json" in page and "saps-180.png" in page
+    weather = client.get("/weather").get_data(as_text=True)
+    assert "manifest-weather.json" in weather and "weather-180.png" in weather
+    assert "saps" not in weather.lower().split("<body")[0].replace("manifest-weather", "")
+    for path in ("/static/manifest-saps.json", "/static/manifest-weather.json", "/static/img/saps-512.png", "/static/img/weather-512.png"):
+        assert client.get(path).status_code == 200
+    names = client.get("/static/manifest-weather.json").get_json()
+    assert names["name"] == "Weather" and names["start_url"] == "/weather"
