@@ -3,40 +3,50 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SAPS KZN · Commissioner</title>
+<title>SAPS KZN · Senior leadership</title>
 <style>
   body { margin: 0; background: #07101c; color: #e7edf6; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-  header { padding: 14px 16px; background: #0a1730; border-bottom: 3px solid #d4af37; display: flex; justify-content: space-between; }
-  a { color: #d4af37; }
+  header { padding: 14px 16px; background: #0a1730; border-bottom: 3px solid #d4af37; display: flex; justify-content: space-between; align-items: center; }
+  a { color: #d4af37; font-size: 13px; margin-left: 12px; }
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 16px; }
   .kpi { background: #121c30; border-bottom: 3px solid #d4af37; padding: 12px; }
   .kpi b { display: block; font-size: 26px; }
-  .flash { background: #8f1d24; animation: pulse 1s infinite; border-radius: 12px; padding: 12px; margin: 0 16px; }
+  h2 { margin: 16px 16px 6px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: #d4af37; }
+  .flash { background: #8f1d24; animation: pulse 1s infinite; border-radius: 12px; padding: 12px; margin: 8px 16px; }
   @keyframes pulse { 50% { opacity: .55; } }
   .card { background: #121c30; margin: 8px 16px; padding: 10px; border-radius: 10px; }
-  .cas { color: #d4af37; font-family: ui-monospace, monospace; }
+  .cas { color: #d4af37; font-family: ui-monospace, monospace; font-size: 13px; }
+  .fine { color: #93a4bd; font-size: 13px; }
 </style>
 </head>
 <body>
-<header><b>COMMISSIONER · KZN</b><a href="/desk">Desk</a></header>
+<header>
+  <b>SENIOR LEADERSHIP · KZN</b>
+  <div><a href="/desk">Desk</a><a href="/brief">Brief</a></div>
+</header>
 <div class="kpis">
   <div class="kpi"><b id="all">0</b><span>All received</span></div>
   <div class="kpi"><b id="cases">0</b><span>Cases</span></div>
   <div class="kpi"><b id="tips">0</b><span>Anonymous</span></div>
   <div class="kpi"><b id="red">0</b><span>Referred up</span></div>
 </div>
-<div id="flash"></div>
+<h2>Anonymous tips</h2>
+<div id="tips"></div>
+<h2>All files</h2>
 <div id="list"></div>
 <script>
 async function load() {
   const reports = await (await fetch("/api/reports")).json();
-  const referred = reports.filter(c => c.kind === "tip" && c.desk === "commissioner");
+  const tips = reports.filter(c => c.kind === "tip");
+  const referred = tips.filter(c => c.desk === "commissioner" || c.status === "referred");
   document.getElementById("all").textContent = reports.length;
   document.getElementById("cases").textContent = reports.filter(c => c.kind !== "tip").length;
-  document.getElementById("tips").textContent = reports.filter(c => c.kind === "tip").length;
+  document.getElementById("tips").textContent = tips.length;
   document.getElementById("red").textContent = referred.length;
-  document.getElementById("flash").innerHTML = referred.map(c => `<div class="flash">RED · ${c.cas} · ${c.label} · referred by head office</div>`).join("");
-  document.getElementById("list").innerHTML = reports.map(c => `<div class="card"><div class="cas">${c.cas}</div>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label} · ${c.officer || "no officer yet"}</div>`).join("");
+  document.getElementById("tips").innerHTML = tips.length
+    ? tips.map(c => `<div class="${c.desk === "commissioner" || c.status === "referred" ? "flash" : "card"}"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.address || "place not given"} · ${c.verified ? "verified" : "not acted on"} · ${c.desk || "tip-off"}</div></div>`).join("")
+    : `<div class="card"><div class="fine">No anonymous tips yet. They appear here when a citizen uses Report anonymously.</div></div>`;
+  document.getElementById("list").innerHTML = reports.map(c => `<div class="card"><div class="cas">${c.cas}</div>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label} · ${c.cluster || ""} · ${c.officer || "no officer yet"}</div>`).join("");
 }
 load();
 setInterval(load, 2000);
