@@ -1,0 +1,25 @@
+# Secrets and local config: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+service-account*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Local data and deploy bundles
+*.db
+*.sqlite*
+*.zip
+uploads/
+
+# Editor / tooling
+.claude/
+.vscode/
