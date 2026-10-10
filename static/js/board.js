@@ -11,7 +11,7 @@
   const STATUS_CHIP = { new: "new", assigned: "accepted", in_progress: "accepted", referred: "referred", closed: "closed" };
   const GENDERS = [["female", "Female"], ["male", "Male"], ["other", "Other"], ["undisclosed", "Not given"]];
 
-  const S = { feed: null, version: null, tab: "overview", stop: null, units: null, audit: null, map: null, layers: null };
+  const S = { folder: "all", feed: null, version: null, tab: "overview", stop: null, units: null, audit: null, map: null, layers: null };
 
   const hhmm = (ts) => new Date(ts * 1000).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
   const nowS = () => (S.feed ? S.feed.now : Date.now() / 1000);
@@ -116,7 +116,7 @@
   function renderPanel() {
     const p = $("panel");
     if (S.map && S.tab !== "overview" && S.tab !== "deploy") { try { S.map.remove(); } catch (e) { /* ok */ } S.map = null; }
-    const fn = { overview, tips, deploy, people, refs, perf, audit, brief }[S.tab] || overview;
+    const fn = { overview, tips, deploy, people, refs, perf, shifts, audit, brief }[S.tab] || overview;
     const keepY = window.scrollY;
     clear(p);
     fn(p);
@@ -355,37 +355,63 @@
   }
 
   // ------------------------------------------------------------------ access log
-  async function audit(p) {
-    p.appendChild(h("div.stack.stack--4",
-      card("Shifts: who signed in and out", h("span.chip.chip--restricted", { text: "Photos taken at sign-in and sign-out" }), h("div#shift-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the shift record" })))),
-      card("Who opened what", h("span.chip.chip--restricted", { text: "Restricted records are logged" }), h("div#audit-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the log" }))))));
+  // ------------------------------------------------------------------ sign-in records (folders by section)
+  const SECTION_FOLDERS = [["call_centre", "Call centre", "phone"], ["desk", "Desk", "alert"], ["tip_line", "Tip-off line", "eye-off"], ["gbv", "GBV desk", "heart"]];
+  function dayLabel(ts) {
+    const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 86400000);
+    const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    return same(d, t) ? "Today" : same(d, y) ? "Yesterday" : d.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" });
+  }
+  async function shifts(p) {
+    p.appendChild(h("div#shift-root.stack.stack--4", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the sign-in records" }))));
+    let list;
+    try { list = (await api("/api/staff/shifts")).shifts; } catch (e) { clear($("shift-root")).append(h("p.error-line", { text: e.message })); return; }
+    const root = $("shift-root"); if (!root) return;
+    clear(root);
+    const inFolder = (x) => S.folder === "all" || x.section === S.folder;
+    const shown = list.filter(inFolder);
+    root.appendChild(h("div.banner.banner--restricted", icon("lock"), h("span", { text: "Every officer gives a name or number and a live camera photo when they sign in and again when they sign out. Opening a photo is written to the access log." })));
+    root.appendChild(h("div.pipeline", ...[["all", "All sections", "file"], ...SECTION_FOLDERS.map((f) => [f[0], f[1], f[2]])].map(([key, label, ico]) => {
+      const mine = list.filter((x) => key === "all" || x.section === key);
+      const on = mine.filter((x) => !x.out_at).length;
+      return h("button.stage" + (S.folder === key ? ".stage--alert" : ""), { type: "button", "aria-pressed": String(S.folder === key), style: "text-align:left;cursor:pointer;font:inherit;color:inherit",
+        onclick: () => { S.folder = key; renderPanel(); } },
+        h("span.chip-row", icon("building"), h("span", { text: label })), h("b", { text: String(mine.length) }), h("span", { text: on + " on shift now" }));
+    })));
+    const groups = {};
+    shown.forEach((x) => { (groups[dayLabel(x.in_at)] = groups[dayLabel(x.in_at)] || []).push(x); });
+    if (!shown.length) { root.appendChild(h("div.state", h("span.state__icon", icon("inbox", "icon--lg")), h("p.state__title", { text: "No sign-ins in this folder yet" }))); return; }
+    Object.entries(groups).forEach(([day, rows]) => {
+      root.appendChild(card((S.folder === "all" ? "All sections" : (SECTION_FOLDERS.find((f) => f[0] === S.folder) || [0, ""])[1]) + " · " + day, h("span.chip.chip--neutral", { text: rows.length + " sign-in" + (rows.length === 1 ? "" : "s") }),
+        h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Officer", "Section", "Signed in", "Signed out", "Time on shift", "Photos"].map((x) => h("th", { scope: "col", text: x })))),
+          h("tbody", ...rows.map((x) => h("tr", h("th", { scope: "row", text: x.officer_id }), h("td", { text: x.section_label }),
+            h("td", { text: hhmm(x.in_at) }), h("td", { text: x.out_at ? hhmm(x.out_at) : "On shift now" }),
+            h("td", { text: x.out_at ? dur(x.out_at - x.in_at) : dur(nowS() - x.in_at) }),
+            h("td", x.has_in_photo || x.has_out_photo ? h("button.btn.btn--secondary", { type: "button", onclick: () => showShiftPhotos(x) }, icon("camera"), "View photos")
+              : h("span.muted", { text: x.synthetic ? "none (demo data)" : "" }), x.in_photo_missing ? h("span.chip.chip--warning", { text: "In: no photo" }) : null, x.out_photo_missing ? h("span.chip.chip--warning", { text: "Out: no photo" }) : null))))))));
+    });
+  }
+  async function showShiftPhotos(x) {
     try {
-      const sh = (await api("/api/staff/shifts")).shifts;
-      const box = $("shift-body"); if (box) {
-        clear(box);
-        box.appendChild(h("p.muted.text-sm", { text: "Every officer gives an officer ID and a photo when they sign in and again when they sign out. Opening a photo is written to the access log below." }));
-        box.appendChild(h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Officer ID", "Section", "Signed in", "Signed out", "Photos"].map((x) => h("th", { scope: "col", text: x })))),
-          h("tbody", ...sh.map((x) => h("tr", h("th", { scope: "row", text: x.officer_id }), h("td", { text: x.section_label }), h("td", { text: fmtTime(x.in_at) }),
-            h("td", { text: x.out_at ? fmtTime(x.out_at) : "On shift" }),
-            h("td", x.has_in_photo ? h("button.btn.btn--ghost", { type: "button", onclick: () => showShiftPhoto(x, "in") }, "In") : (x.in_photo_missing ? h("span.chip.chip--warning", { text: "In: no photo" }) : h("span.muted", { text: x.synthetic ? "none (demo data)" : "none" })),
-              x.has_out_photo ? h("button.btn.btn--ghost", { type: "button", onclick: () => showShiftPhoto(x, "out") }, "Out") : (x.out_photo_missing ? h("span.chip.chip--warning", { text: "Out: no photo" }) : null))))))));
-      }
-    } catch (e) { const b = $("shift-body"); if (b) { clear(b); b.appendChild(h("p.error-line", { text: e.message })); } }
+      const get = async (which, has) => (has ? (await api(`/api/staff/shift-photo/${x.id}/${which}`)).data_url : "");
+      const [pin, pout] = await Promise.all([get("in", x.has_in_photo), get("out", x.has_out_photo)]);
+      const pic = (src, label) => h("figure", { style: "margin:0;display:grid;gap:var(--space-2)" }, src ? h("img", { src, alt: label + " photo of " + x.officer_id, style: "width:100%;border-radius:var(--radius-md)" }) : h("div.state", h("p.state__text", { text: "No photo" })), h("figcaption.muted.text-sm", { text: label }));
+      await ask({ title: x.officer_id + ", " + x.section_label, body: "Signed in " + fmtTime(x.in_at) + (x.out_at ? ", signed out " + fmtTime(x.out_at) : ", still on shift"), ok: "Close", noCancel: true,
+        node: h("div.panel-grid.panel-grid--2", pic(pin, "Signed in " + hhmm(x.in_at)), pic(pout, x.out_at ? "Signed out " + hhmm(x.out_at) : "Not signed out yet")) });
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  // ------------------------------------------------------------------ access log
+  async function audit(p) {
+    p.appendChild(card("Who opened what", h("span.chip.chip--restricted", { text: "Restricted records are logged" }), h("div#audit-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the log" })))));
     try {
       const a = await api("/api/staff/audit");
       const body = $("audit-body"); if (!body) return;
       clear(body);
-      body.appendChild(h("p.muted.text-sm", { text: "Every time a GBV, SOS or tip record is opened, and every action that changes a file, is written here with the officer and the time. This is what an oversight body would ask to see." }));
+      body.appendChild(h("p.muted.text-sm", { text: "Every time a GBV, SOS or tip record is opened, every sign-in photo that is viewed, and every action that changes a file, is written here with the officer and the time. This is what an oversight body would ask to see." }));
       body.appendChild(h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Time", "Who", "Role", "Action", "Record", "Detail"].map((x) => h("th", { scope: "col", text: x })))),
         h("tbody", ...a.audit.slice(0, 120).map((r) => h("tr", h("td", { text: fmtTime(r.at) }), h("td", { text: r.actor }), h("td", { text: r.role }), h("td", { text: r.action }), h("td", h("span.ref", { text: r.target || "" })), h("td", { text: r.detail || "" })))))));
     } catch (e) { const body = $("audit-body"); if (body) { clear(body); body.appendChild(h("p.error-line", { text: e.message })); } }
-  }
-  async function showShiftPhoto(x, which) {
-    try {
-      const r = await api(`/api/staff/shift-photo/${x.id}/${which}`);
-      await ask({ title: x.officer_id + ", " + (which === "in" ? "signed in" : "signed out"), body: x.section_label + " · " + fmtTime(which === "in" ? x.in_at : x.out_at), ok: "Close", noCancel: true,
-        node: h("img", { src: r.data_url, alt: "Photo of " + x.officer_id, style: "width:100%;max-width:20rem;border-radius:var(--radius-md)" }) });
-    } catch (e) { toast(e.message, "error"); }
   }
 
   // ------------------------------------------------------------------ daily brief
