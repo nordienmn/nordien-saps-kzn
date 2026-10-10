@@ -58,6 +58,65 @@ Combines Claude's review (`docs/REVIEW-2026-10-10.md`) with Kimi's build pack. 2
 **Rehearsal**
 - Use Kimi's checklist idea: golden path under four minutes, a screen-recorded fallback on a second laptop, and a seeded fallback for the red-flash moment. Build the final checklist from the pack once the file is available.
 
+## Kimi's deep-dive review: claims tested
+
+Kimi sent two documents: the build pack above, and a door-by-door "shortcomings and improvements" review. Here is the second one, tested against the code and the saved copy of the live pages. Most of it is proposals, which I can't "test", so I list only what claims something about the app as it is today.
+
+**Confirmed (matches what I found or can reproduce)**
+
+- The call screen shows a LIVE badge from the first second while the text says "Connecting…". No Ringing, Connected or timer states exist.
+- No recording notice anywhere on the citizen side. No visible failure path: every submit function awaits the network with no error handling, so with no signal the screen just stays as it is (code-read).
+- The Call button never dials 10111. There is no phone-dialer fallback.
+- Mute, Speaker and Camera: Mute and Speaker are label-only. Camera-off leaves a black or broken panel.
+- No anonymous receipt code. The crime and tip confirmations exist but are off-screen on a phone.
+- GBV wording differs between the main app and the weather door ("Hospital?" vs "Hospital or clinic", "Call you now?" vs "Should someone call you now?"), and "Can you identify the person?" appears in both.
+- GBV referral is only a log line. No referral object, no partner, no status.
+- No quick-exit anywhere. No queue position, no case age or SLA colours, no status buttons.
+- Commissioner header: "COMMISSIONER · KZN" with an unexplained "Desk" link beside it. The "Movement" section is simply the case feed, and its label says nothing.
+- Commissioner filters ignore the URL (no URL-parameter code).
+- `/headoffice` is only a redirect to the commissioner page.
+- isiZulu is partial.
+
+**New and worth adopting** (I had not listed these)
+
+- Queue behaviour when several calls land at once (position for the citizen, depth for the desk).
+- Case age colours (green, amber, red).
+- URL-persisted board filters; one geography hierarchy instead of three overlapping filters.
+- Suppress or blur map dots when a cluster has fewer than 5 cases, so a single GBV report can't identify a person.
+- A "Restricted record, access logged" badge on GBV and anonymous files at board level (the badge is a UI line; real access control is Phase 2 and later).
+- Crime type dropdown aligned to the SAPS categories, in both languages.
+- A safety line on photo prompts: "Only take a photo if it is safe."
+- A one-line reason next to each rule the citizen has to follow.
+- Friend contact in the weather door: **in the code the friend is never contacted.** The name and number are saved on the phone and pasted into the SOS note as text. Kimi asks to define what the friend receives; the honest answer is that today they receive nothing.
+
+**Not supported, or wrong about the current build**
+
+| Kimi claim | What the code and pages show |
+|---|---|
+| The desk login prints "Password is 0000" | That line is hidden until a wrong password is entered. The real problem is that the field is pre-filled with the password, so there is no password in practice. |
+| The crime form shows only "Place", with no location button or pin | It has "Current location" and "Drop pin" buttons, and the pin works (but gives a random coordinate; see my report). |
+| Time is a free field | It is a date-time picker. The real fault: the value is thrown away on submit. |
+| The crime report gives the citizen nothing after submit | A case number does appear, but off-screen on a phone. |
+| Unsafe infrastructure needs a category list and shows "A file photo is not accepted" | It already has a ten-item list (Dark street, Broken light, Open ditch and so on). It has no photo field at all. The "file photo is not accepted" wording is on the profile page. |
+| Anonymous photo is enforced | `capture="environment"` is only a hint, and the photo is never sent. |
+| Every counter reads 0 | Not on the live site, which starts with 5 seed records. |
+| The red flash may break the WCAG limit of three flashes a second | It is a 1 Hz pulse with reduced opacity, which is within the limit. The real problems are its position below the fold and no reduced-motion setting. |
+| Case numbers might differ across surfaces | They match: the same CAS number shows on the citizen confirmation, the desk and the board (the format is not station-based, which is a separate gap). |
+| Show an "AI-assisted transcript, operator confirms" badge | There is no AI. The transcript is four scripted lines. A badge saying otherwise would be untrue. |
+| The weather door is a single page hidden behind a thin weather cover | It is one of ten random covers. One tap on the main button sends the SOS. Kimi's gesture and confirm advice is right, but the problem is bigger than described. |
+
+**Overstated or unverified**
+
+- "NG112 requirements are non-negotiable": NG112 is a European framework. Good guidance, not a South African obligation.
+- "POPIA requires informed, specific consent": consent is one lawful basis among several. A notice duty applies regardless [MEMORY]. The section numbers cited (retention and security) look right [MEMORY]. Have someone qualified confirm before the notice copy is finalised.
+- The Namola/iER hold-button pattern, UK Bright Sky and "SA GBV app patterns" were not verified.
+- "The concept is world-class and prototypes the NG112 future": unsupported. Do not use that line in the room.
+
+**Could not test**
+
+- Two officers on two doors at once. The Officer ID is only text in the browser and the server has no session, so the claim is almost meaningless today.
+- Speaker routing, low-end Android performance, throttled 3G first paint.
+
 ## What to give Grok
 
 Give Grok this plan and the Claude review, not Kimi's text. Where Kimi found something new, it is credited above.
