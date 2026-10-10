@@ -261,7 +261,7 @@
   $("#f-profile").addEventListener("submit", (e) => {
     e.preventDefault();
     const name = $("#p-name").value.trim(), mobile = $("#p-mobile").value.trim();
-    if (!name || !mobile) return formError("p-error", t("pNeed"));
+
     store("saps-profile", { name, mobile, addr: $("#p-addr").value.trim(), face: profileFace, gender: $("#p-gender").value, age_band: $("#p-age").value, friend_name: $("#p-fname").value.trim(), friend: $("#p-fmob").value.trim() });
     toast(t("pSaved")); renderProfileHints(); go("home");
   });
@@ -306,8 +306,7 @@
     e.preventDefault();
     formError("c-error", ""); fieldError("c-type", "");
     const type = $("#c-type").value, w = whereValue("c");
-    if (!type) { fieldError("c-type", t("errType")); return $("#c-type").focus(); }
-    if (w.lat === null && !w.address) return formError("c-error", t("errPlace"));
+    // A report is never blocked for being incomplete. It goes to the desk, which sees what is missing.
     const p = getProfile(), useProfile = p && $("#c-profile").checked;
     const timeVal = $("#c-time").value;
     const body = { kind: "crime", type, ...w, note: $("#c-text").value.trim(), photos: photoState.c || [] };
@@ -350,9 +349,9 @@
     e.preventDefault();
     formError("g-error", ""); $("#g-safe-e").textContent = ""; fieldError("g-mobile", "");
     const safe = ($('input[name="safe"]:checked') || {}).value;
-    if (!safe) { $("#g-safe-e").textContent = t("gSafeQ"); return $('input[name="safe"]').focus(); }
+
     const pref = $('input[name="contact"]:checked').value, mobile = $("#g-mobile").value.trim();
-    if (pref !== "none" && !mobile) { fieldError("g-mobile", t("errMobile")); return $("#g-mobile").focus(); }
+
     const p = getProfile();
     const body = {
       kind: "gbv", safe_now: safe, wants: $$('input[name="wants"]:checked').map((i) => i.value),
@@ -375,8 +374,7 @@
     e.preventDefault();
     formError("a-error", ""); fieldError("a-type", "");
     const type = $("#a-type").value, w = whereValue("a");
-    if (!type) { fieldError("a-type", t("errType")); return $("#a-type").focus(); }
-    if (w.lat === null && !w.address) return formError("a-error", t("errPlace"));
+
     // Nothing identifying is sent: no profile, no name, no number. The server stores none either.
     const body = { kind: "tip", type, ...w, note: $("#a-text").value.trim(), photos: photoState.a || [] };
     try {
@@ -391,8 +389,7 @@
     e.preventDefault();
     formError("u-error", ""); fieldError("u-type", "");
     const type = $("#u-type").value, w = whereValue("u");
-    if (!type) { fieldError("u-type", t("errType")); return $("#u-type").focus(); }
-    if (w.lat === null && !w.address) return formError("u-error", t("errPlace"));
+
     const body = { kind: "area", type, ...w, photos: photoState.u || [] };
     try {
       const r = await submitting($("#u-submit"), () => api("/api/c/report", { body }));

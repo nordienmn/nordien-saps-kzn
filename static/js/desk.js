@@ -197,7 +197,7 @@
         h("span.queue-row__main",
           h("span.queue-row__title", icon(ico), c.label, c.restricted ? icon("lock", "icon--sm") : null),
           h("span.queue-row__meta", c.cluster_name + (c.address ? " · " + c.address : "")),
-          h("span.queue-row__meta", h("span.ref", { text: c.ref }), h("span.chip.chip--dot.chip--" + chip, { text: word + (c.call_state === "ringing" ? " (ringing)" : "") }))),
+          h("span.queue-row__meta", h("span.ref", { text: c.ref }), h("span.chip.chip--dot.chip--" + chip, { text: word + (c.call_state === "ringing" ? " (ringing)" : "") }), c.incomplete ? h("span.chip.chip--warning", { text: "Incomplete" }) : null)),
         h("span.queue-row__side",
           h("span.prio.prio--" + pnum, { text: "P" + pnum }),
           c.status !== "closed" ? h("span.age" + (ageCls ? "." + ageCls : ""), { "aria-label": "waiting " + fmtAge(c.created_at, nowSec()) }, fmtAge(c.created_at, nowSec())) : null));
@@ -380,6 +380,7 @@
         d.restricted ? h("span.restricted", icon("lock"), "Restricted record - access logged") : null,
         h("span.muted.text-sm", { text: "Received " + hhmm(d.created_at) + (d.status !== "closed" ? " · " + fmtAge(d.created_at, nowSec()) + " ago" : "") }))));
 
+    if (d.incomplete) root.appendChild(h("div.banner.banner--warning", icon("alert"), h("span", { text: "Incomplete report. Not given: " + (d.missing || []).join(", ") + ". It reached the desk anyway. Follow up if you can." })));
     root.appendChild(h("div.actions-wrap", h("div.action-bar", { role: "group", "aria-label": "Case actions" }, ...actionButtons(d, tip))));
 
     root.appendChild(dockCard(d, tip));

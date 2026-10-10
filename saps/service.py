@@ -115,8 +115,11 @@ def _save_media(store, case, photos, face, uploads=None):
     media = []
     for i, data_url in enumerate(photos[:MAX_PHOTOS]):
         mid = f"{case['id']}-p{i + 1}"
-        store.put("media", {"id": mid, "case_id": case["id"], "type": "photo", "data_url": _check_image(data_url, MAX_PHOTO_BYTES)})
-        media.append({"id": mid, "type": "photo"})
+        try:
+            store.put("media", {"id": mid, "case_id": case["id"], "type": "photo", "data_url": _check_image(data_url, MAX_PHOTO_BYTES)})
+            media.append({"id": mid, "type": "photo"})
+        except Invalid:
+            continue  # an unreadable picture is left out; the report still goes through
     if face:
         # The profile photo is optional. A bad one must never stop a call or a report, so it is simply left out.
         try:
@@ -196,8 +199,13 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     if cluster == geo.UNLOCATED and payload.get("cluster") in geo.CLUSTERS and synthetic:
         cluster = payload["cluster"]  # only seed data may name a cluster directly
 
+    missing = []  # what the citizen did not give. A report is NEVER refused for being incomplete; the desk sees what is missing.
     name = clean(payload.get("name"), 80)
-    mobile = clean_mobile(payload.get("mobile"))
+    try:
+        mobile = clean_mobile(payload.get("mobile"))
+    except Invalid:
+        mobile = ""
+        missing.append("a valid mobile number")
     note = clean(payload.get("note"), MAX_NOTE)
     # Optional, self-described, used only in grouped statistics. Anything not recognised becomes "undisclosed".
     gender = payload.get("gender") if payload.get("gender") in taxonomy.GENDERS else "undisclosed"
@@ -213,9 +221,10 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     if kind == "crime":
         label_key = clean(payload.get("type"), 40)
         if label_key not in taxonomy.CRIME_TYPES:
-            raise Invalid("Choose the type of crime.", "type")
+            label_key = "other"
+            missing.append("the type of crime")
         if lat is None and not address:
-            raise Invalid("Add a place, or use your current location.", "place")
+            missing.append("the place")
         priority = taxonomy.CRIME_TYPES[label_key][2]
         if taxonomy.CRIME_TYPES[label_key][3]:
             kind = "gbv"  # a domestic-violence or sexual-offence report goes to the GBV door
@@ -223,22 +232,23 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         if occurred not in (None, ""):
             try:
                 occurred = float(occurred) / 1000.0
+                if now() - 30 * 86400 <= occurred <= now() + 3600:
+                    extra["occurred_at"] = occurred
             except (TypeError, ValueError):
-                raise Invalid("That time does not look right.", "time")
-            if not now() - 30 * 86400 <= occurred <= now() + 3600:
-                raise Invalid("That time does not look right.", "time")
-            extra["occurred_at"] = occurred
+                pass  # an unreadable time is simply left out
     elif kind == "gbv":
         label_key = "gbv_request"
         safe = clean(payload.get("safe_now"), 8)
         if safe not in ("yes", "no", "unsure"):
-            raise Invalid("Please tell us if you are safe right now.", "safe_now")
+            safe = "unsure"
+            missing.append("whether they are safe right now")
         wants = [w for w in (payload.get("wants") or []) if w in ("social_worker", "hospital", "shelter", "transport", "police")]
         contact_pref = clean(payload.get("contact_pref"), 8)
         if contact_pref not in ("call", "sms", "none"):
             contact_pref = "none"
         if contact_pref in ("call", "sms") and not mobile:
-            raise Invalid("Add a number we may use, or choose 'Do not contact me'.", "mobile")
+            contact_pref = "none"
+            missing.append("a number to reach them")
         priority = "critical" if safe == "no" else "high"
         extra.update({
             "safe_now": safe,
@@ -254,9 +264,10 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     elif kind == "area":
         label_key = clean(payload.get("type"), 40)
         if label_key not in taxonomy.AREA_TYPES:
-            raise Invalid("Choose what is unsafe.", "type")
+            label_key = "other"
+            missing.append("what is unsafe")
         if lat is None and not address:
-            raise Invalid("Add a place, or use your current location.", "place")
+            missing.append("the place")
         priority = "low"
         name = mobile = home_address = friend_name = ""  # unsafe-area reports never carry a person
         registered = False
@@ -287,6 +298,8 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         "age_band": age_band,
         "language": language,
         "registered": registered,
+        "incomplete": bool(missing),
+        "missing": missing,
         "home_address": home_address,
         "friend_name": friend_name,
         "friend": clean(payload.get("friend"), 40) if kind in ("gbv", "sos", "crime", "call") else "",
@@ -333,12 +346,14 @@ def create_tip(store, payload, synthetic=False, created_at=None):
 
     Returns (tip, code). The one-time code is shown to the citizen once; only its hash is kept.
     """
+    missing = []
     key = clean(payload.get("type"), 40)
     if key not in taxonomy.TIP_TYPES:
-        raise Invalid("Choose what you are reporting.", "type")
+        key = "other"
+        missing.append("what is being reported")
     lat, lon, address = clean_point(payload)
     if lat is None and not address:
-        raise Invalid("Add a place, or use your current location.", "place")
+        missing.append("the place")
     code = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
     cluster = geo.nearest_cluster(lat, lon) if lat is not None else geo.UNLOCATED
     if cluster == geo.UNLOCATED and synthetic and payload.get("cluster") in geo.CLUSTERS:
@@ -359,6 +374,8 @@ def create_tip(store, payload, synthetic=False, created_at=None):
         "timeline": [{"at": ts, "actor": "system", "text": "Tip received. Not a case. No identity stored.", "kind": "system"}],
         "created_at": ts,
         "updated_at": ts,
+        "incomplete": bool(missing),
+        "missing": missing,
         "verification": None,
         "referred_at": None,
         "referred_by": "",
@@ -956,6 +973,7 @@ def _summary(case, role, lang="en"):
         "created_at": case["created_at"], "updated_at": case["updated_at"],
         "call_state": call.get("state", ""), "call_mode": call.get("mode", ""),
         "referrals": len(case["referrals"]),
+        "incomplete": case.get("incomplete", False), "missing": case.get("missing", []),
         "deployed": sum(1 for d in case.get("deployments", []) if d["status"] != "cleared"),
         "has_media": bool(case["media"]),
         "synthetic": case.get("synthetic", False),
@@ -972,6 +990,7 @@ def _tip_summary(tip, role, lang="en"):
         "created_at": tip["created_at"], "updated_at": tip["updated_at"],
         "referred_at": tip.get("referred_at"), "referred_by": tip.get("referred_by", ""), "verification": tip.get("verification"), "closed_by": tip.get("closed_by", ""),
         "outcome": tip.get("outcome", ""), "referrals": len(tip.get("referrals", [])), "has_media": bool(tip.get("media")),
+        "incomplete": tip.get("incomplete", False), "missing": tip.get("missing", []),
         "restricted": True, "priority": "normal", "synthetic": tip.get("synthetic", False),
     }
 

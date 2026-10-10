@@ -33,9 +33,16 @@ UMLAZI = {"lat": -29.9697, "lon": 30.8864}
 
 
 # ---------------------------------------------------------------- citizen reports
-def test_crime_report_needs_type_and_place(client):
-    assert client.post("/api/c/report", json={"kind": "crime", "address": "x"}).status_code == 422
-    assert client.post("/api/c/report", json={"kind": "crime", "type": "theft"}).status_code == 422
+def test_an_incomplete_crime_report_is_accepted_and_flagged(client):
+    a = client.post("/api/c/report", json={"kind": "crime", "address": "x"})
+    b = client.post("/api/c/report", json={"kind": "crime", "type": "theft"})
+    c0 = client.post("/api/c/report", json={"kind": "crime"})
+    assert a.status_code == b.status_code == c0.status_code == 200
+    ca = client.store.get("cases", a.json["id"])
+    assert ca["incomplete"] and ca["missing"] == ["the type of crime"] and ca["label_key"] == "other"
+    cb = client.store.get("cases", b.json["id"])
+    assert cb["incomplete"] and cb["missing"] == ["the place"] and cb["cluster"] == "unlocated"
+    assert set(client.store.get("cases", c0.json["id"])["missing"]) == {"the type of crime", "the place"}
     r = client.post("/api/c/report", json={"kind": "crime", "type": "theft", **UMLAZI})
     assert r.status_code == 200
     assert r.json["ref"].startswith("KZN-2026-") or r.json["ref"].startswith("KZN-")
@@ -60,17 +67,23 @@ def test_domestic_violence_goes_to_gbv_and_is_restricted(client):
     assert case["kind"] == "gbv" and case["restricted"] is True
 
 
-def test_gbv_requires_safety_answer_and_number_when_contact_wanted(client):
-    assert client.post("/api/c/report", json={"kind": "gbv"}).status_code == 422
-    assert client.post("/api/c/report", json={"kind": "gbv", "safe_now": "no", "contact_pref": "call"}).status_code == 422
+def test_gbv_help_goes_through_even_with_nothing_filled_in(client):
+    bare = client.post("/api/c/report", json={"kind": "gbv"})
+    assert bare.status_code == 200
+    case = client.store.get("cases", bare.json["id"])
+    assert case["incomplete"] and case["safe_now"] == "unsure" and case["needs"]
+    nocall = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "no", "contact_pref": "call"})
+    assert nocall.status_code == 200 and client.store.get("cases", nocall.json["id"])["contact_pref"] == "none"
     ok = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "no", "contact_pref": "call", "mobile": "0600000999"})
     assert ok.status_code == 200
     assert client.store.get("cases", ok.json["id"])["priority"] == "critical"
 
 
-def test_bad_mobile_rejected(client):
+def test_a_bad_mobile_number_does_not_stop_the_report(client):
     r = client.post("/api/c/report", json={"kind": "crime", "type": "theft", "mobile": "abc", **UMLAZI})
-    assert r.status_code == 422 and r.json["field"] == "mobile"
+    assert r.status_code == 200
+    case = client.store.get("cases", r.json["id"])
+    assert case["mobile"] == "" and "a valid mobile number" in case["missing"]
 
 
 def test_area_report_never_keeps_a_person(client):
@@ -89,9 +102,9 @@ def test_anonymous_tip_stores_no_identity_and_returns_a_code(client):
     assert client.get(f"/api/staff/tip-code/{r.json['code']}").json["ref"] == r.json["ref"]
 
 
-def test_photo_must_be_a_real_image(client):
+def test_an_unreadable_photo_is_left_out_but_the_report_goes_through(client):
     bad = client.post("/api/c/report", json={"kind": "crime", "type": "theft", **UMLAZI, "photos": ["data:image/jpeg;base64,AAAA"]})
-    assert bad.status_code == 422
+    assert bad.status_code == 200 and client.store.get("cases", bad.json["id"])["media"] == []
 
 
 # ---------------------------------------------------------------- request safety
@@ -671,3 +684,19 @@ def test_a_registered_citizens_profile_is_on_every_file_they_open(client):
     login(client, "board")
     feed = client.get("/api/staff/feed").json
     assert "Nomsa" not in str(feed) and "0600000501" not in str(feed) and "Jacaranda" not in str(feed)
+
+
+
+def test_anonymous_tip_and_unsafe_place_and_weather_help_all_go_through_when_incomplete(client):
+    tip = client.post("/api/c/report", json={"kind": "tip"})
+    assert tip.status_code == 200 and len(tip.json["code"]) == 6
+    t = client.store.get("tips", tip.json["ref"])
+    assert t["incomplete"] and t["type_key"] == "other" and set(t["missing"]) == {"what is being reported", "the place"}
+    area = client.post("/api/c/report", json={"kind": "area"})
+    assert area.status_code == 200 and client.store.get("cases", area.json["id"])["incomplete"]
+    weather = client.post("/api/c/report", json={"kind": "gbv", "via": "weather"})
+    assert weather.status_code == 200 and client.store.get("cases", weather.json["id"])["channel"] == "weather"
+    sos = client.post("/api/c/report", json={"kind": "sos"})
+    assert sos.status_code == 200
+    login(client, section="tip_line")
+    assert any(x["incomplete"] for x in client.get("/api/staff/feed").json["tips"])

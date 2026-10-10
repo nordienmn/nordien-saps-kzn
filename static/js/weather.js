@@ -85,7 +85,7 @@ $("send").addEventListener("click", async function () {
   var safe = (document.querySelector("input[name=safe]:checked") || {}).value;
   var reach = (document.querySelector("input[name=reach]:checked") || {}).value || "none";
   var mob = $("mob").value.trim();
-  if (reach !== "none" && !mob) { err.hidden = false; err.textContent = lang === "zu" ? "Faka inombolo yefoni, noma khetha ukungathintwa." : "Add a number we may use, or choose Do not contact me yet."; $("mob").focus(); return; }
+
   var needs = Array.prototype.map.call(document.querySelectorAll("input[name=need]:checked"), function (c) { return c.getAttribute("data-w"); }).join(",").split(",").filter(Boolean);
   var wants = []; needs.forEach(function (w) { if (wants.indexOf(w) < 0) wants.push(w); });
   btn.disabled = true;
