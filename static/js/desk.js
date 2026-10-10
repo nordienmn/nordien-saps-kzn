@@ -19,7 +19,7 @@
   const GENDER = { female: "Female", male: "Male", other: "Other / self-described", undisclosed: "Not given" };
   const AGE = { under_18: "Under 18", "18_24": "18-24", "25_34": "25-34", "35_49": "35-49", "50_64": "50-64", "65_plus": "65+", undisclosed: "Not given" };
 
-  const S = { points: [], drag: null, recStream: null, recorder: null, me: null, feed: null, version: null, door: "calls", filter: "all", sel: null, detail: null, opened: new Set(), ringing: new Set(), stop: null, partners: null, stations: null, room: null, recog: null };
+  const S = { selfie: "", points: [], drag: null, recStream: null, recorder: null, me: null, feed: null, version: null, door: "calls", filter: "all", sel: null, detail: null, opened: new Set(), ringing: new Set(), stop: null, partners: null, stations: null, room: null, recog: null };
 
   // ------------------------------------------------------------------ helpers
   function toast(msg, kind) {
@@ -44,19 +44,72 @@
   }
 
   // ------------------------------------------------------------------ sign in
+  // ---- sign-in photo
+  async function startSelfie() {
+    $("selfie-img").hidden = true; $("selfie-v").hidden = false; $("selfie-take").hidden = false; $("selfie-retake").hidden = true; S.selfie = "";
+    $("photo-err").hidden = true;
+    try { await SAPS.camera.start($("selfie-v")); }
+    catch (e) { $("photo-err").hidden = false; $("photo-err").textContent = "The camera could not start. Allow the camera for this page, then press Take photo again."; $("no-camera").hidden = false; }
+  }
+  $("selfie-take").addEventListener("click", async () => {
+    if (!SAPS.camera.stream) { await startSelfie(); if (!SAPS.camera.stream) return; }
+    S.selfie = SAPS.camera.snap($("selfie-v"), 360);
+    $("selfie-img").src = S.selfie; $("selfie-img").hidden = false; $("selfie-v").hidden = true; $("selfie-take").hidden = true; $("selfie-retake").hidden = false;
+    SAPS.camera.stop(); $("photo-err").hidden = true;
+  });
+  $("selfie-retake").addEventListener("click", startSelfie);
+  $("no-camera").addEventListener("click", () => { S.noCamera = true; $("login-form").requestSubmit(); });
+  if ($("login-view") && !$("login-view").hidden) startSelfie();
+
+  try { const last = localStorage.getItem("desk-section"); if (last && $("section")) $("section").value = last; } catch (e) { /* ok */ }
   $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = $("login-error"); err.hidden = true;
     const btn = $("login-btn"); btn.disabled = true;
     try {
-      await api("/api/auth/login", { body: { role: "desk", officer: $("officer").value, password: $("password").value } });
+      try { localStorage.setItem("desk-section", $("section").value); } catch (e) { /* ok */ }
+      await api("/api/auth/login", { body: { role: "desk", section: $("section").value, officer: $("officer").value, photo: S.selfie || "", no_camera: !S.selfie && S.noCamera, password: $("password").value } });
+      SAPS.camera.stop();
       $("password").value = "";
       await boot();
     } catch (ex) {
       err.hidden = false; err.replaceChildren(icon("alert", "icon--sm"), document.createTextNode(ex.offline ? "No connection. Try again." : ex.message));
     } finally { btn.disabled = false; }
   });
-  $("logout").addEventListener("click", async () => { try { await api("/api/auth/logout", { body: {} }); } catch (e) { /* ignore */ } if (S.stop) S.stop(); location.reload(); });
+  const outDlg = $("out-dlg");
+  async function doLogout(photo) {
+    try { await api("/api/auth/logout", { body: { photo: photo || "" } }); } catch (e) { /* ignore */ }
+    SAPS.camera.stop(); if (S.stop) S.stop(); location.reload();
+  }
+  $("logout").addEventListener("click", async () => {
+    $("out-err").hidden = true; $("out-img").hidden = true; $("out-v").hidden = false; $("out-take").hidden = false; $("out-skip").hidden = true;
+    outDlg.showModal();
+    try { await SAPS.camera.start($("out-v")); }
+    catch (e) { $("out-err").hidden = false; $("out-err").textContent = "The camera could not start. Allow the camera and try again, or sign out without a photo (this is flagged in the shift record)."; $("out-skip").hidden = false; }
+  });
+  $("out-take").addEventListener("click", () => {
+    if (!SAPS.camera.stream) { $("out-err").hidden = false; $("out-err").textContent = "No camera. Use the option below."; $("out-skip").hidden = false; return; }
+    const photo = SAPS.camera.snap($("out-v"), 360);
+    $("out-img").src = photo; $("out-img").hidden = false; $("out-v").hidden = true;
+    doLogout(photo);
+  });
+  $("out-skip").addEventListener("click", () => doLogout(""));
+  $("out-cancel").addEventListener("click", () => { SAPS.camera.stop(); outDlg.close(); });
+  outDlg.addEventListener("close", () => SAPS.camera.stop());
+
+  // Each section opens its own doors and nothing else.
+  const SECTION_DOORS = { call_centre: ["calls"], desk: ["crime", "area"], tip_line: ["anon"], gbv: ["gbv"] };
+  function applySection(section, label) {
+    const allowed = SECTION_DOORS[section] || [];
+    S.allowed = allowed;
+    document.querySelectorAll("#doors [data-door]").forEach((t) => { t.hidden = !allowed.includes(t.dataset.door); });
+    $("doors").hidden = allowed.length < 2;
+    const name = { call_centre: "Call centre", desk: "Desk", tip_line: "Tip-off line", gbv: "GBV desk" }[section] || "Control room";
+    $("section-name").textContent = "Control room · " + name;
+    $("queue-title").textContent = name;
+    if (!allowed.includes(S.door)) { S.door = allowed[0] || "calls"; }
+    document.querySelectorAll("#doors [role=tab]").forEach((t) => { const on = t.dataset.door === S.door; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; });
+  }
 
   async function boot() {
     let me;
@@ -65,7 +118,9 @@
     if (me.role === "desk") {
       $("login-view").hidden = true; $("desk-view").hidden = false;
       $("officer-id").textContent = me.officer;
-      document.title = "SAPS KZN control room desk (DEMO)";
+      document.title = me.officer + " · SAPS KZN control room (DEMO)";
+      applySection(me.section, me.officer);
+      SAPS.camera.stop();
       if (!S.stop) S.stop = poll(refresh, 2000);
     } else {
       $("login-view").hidden = false; $("desk-view").hidden = true;
@@ -104,7 +159,7 @@
   function isOpen(it) { return it.status !== "closed"; }
 
   function renderCounts() {
-    Object.keys(DOORS).forEach((k) => { $("n-" + k).textContent = items(k).filter(isOpen).length; });
+    (S.allowed || Object.keys(DOORS)).forEach((k) => { $("n-" + k).textContent = items(k).filter(isOpen).length; });
   }
 
   function visible() {
@@ -171,7 +226,7 @@
   }
   document.querySelectorAll("#doors [role=tab]").forEach((t) => t.addEventListener("click", () => setDoor(t.dataset.door)));
   $("doors").addEventListener("keydown", (e) => {
-    const order = Object.keys(DOORS), i = order.indexOf(S.door);
+    const order = S.allowed || Object.keys(DOORS), i = order.indexOf(S.door);
     if (e.key === "ArrowRight") { e.preventDefault(); setDoor(order[(i + 1) % order.length], true); }
     if (e.key === "ArrowLeft") { e.preventDefault(); setDoor(order[(i + order.length - 1) % order.length], true); }
   });
@@ -350,7 +405,7 @@
     root.appendChild(h("div.casefile__head", h("span.ref.casefile__ref", { text: c.ref }), h("h1.casefile__title", { text: c.label + ", " + c.cluster_name }),
       h("div.cluster", h("span.restricted", icon("lock"), "Restricted record - access logged"))));
     root.appendChild(h("div.lockbox", icon("lock", "icon--lg"), h("strong", { text: "Name and number are hidden" }),
-      h("p.text-sm", { text: "Opening this record is logged with your officer ID and the time. Open it only to act on it." }),
+      h("p.text-sm", { text: "Opening this record is logged with your section and the time. Open it only to act on it." }),
       h("button.btn.btn--secondary", { type: "button", onclick: () => { S.opened.add(c.id); loadDetail({ id: c.id, kind: "case" }, false); toast("Record opened. Access has been logged."); } }, icon("lock"), "Open restricted record")));
   }
 

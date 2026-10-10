@@ -8,11 +8,11 @@ Built 2026-10-10 on branch `review/claude-2026-10-10`. Grok's original is tagged
 |---|---|---|
 | Citizen app | `/citizen` | none (phone) |
 | Weather door (hidden GBV help) | `/weather` | none (phone) |
-| Control room desk | `/desk` | officer ID + desk password |
-| HQ board (Commissioner) | `/commissioner` | board password |
+| Control room desk | `/desk` | pick a section (Call centre, Desk, Tip-off line, GBV), type any name or number, take the sign-in photo with the camera, password `0000` |
+| HQ board (Commissioner) | `/commissioner` | password `0000` |
 | Action points | `/unit` (list, after desk or board sign in); each point has a private link `/unit/<id>?k=<token>` | the link itself |
 
-Passwords and keys live in `.env.production` on the owner's computer (git-ignored). They are set as Cloud Run environment variables; they are not in the code or the image.
+All passwords are `0000` (the owner's decision for a demo with no real data). Other keys live in `.env.production` on the owner's computer (git-ignored) and are set as Cloud Run environment variables; they are not in the code or the image. Allow the browser to use the camera on the desk page.
 
 ## Before a showing
 

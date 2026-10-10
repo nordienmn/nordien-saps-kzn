@@ -109,7 +109,7 @@ class FirestorePersister:
                     name, value = args
                     self._col("counters").document(name).set({"value": value})
                 elif op == "clear":
-                    for coll in ("cases", "tips", "referrals", "partners", "media", "audit", "officers", "counters"):
+                    for coll in ("cases", "tips", "referrals", "partners", "media", "audit", "officers", "shifts", "counters"):
                         for snap in self._col(coll).stream():
                             snap.reference.delete()
             except Exception as exc:  # never crash the worker; the in-memory copy stays correct
@@ -129,7 +129,7 @@ class FirestorePersister:
 
     def load_all(self):
         docs, counters = {}, {}
-        for coll in ("cases", "tips", "referrals", "partners", "media", "audit", "officers"):
+        for coll in ("cases", "tips", "referrals", "partners", "media", "audit", "officers", "shifts"):
             docs[coll] = {s.id: s.to_dict() for s in self._col(coll).stream()}
         for snap in self._col("counters").stream():
             counters[snap.id] = (snap.to_dict() or {}).get("value", 0)

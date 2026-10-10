@@ -356,15 +356,36 @@
 
   // ------------------------------------------------------------------ access log
   async function audit(p) {
-    p.appendChild(card("Who opened what", h("span.chip.chip--restricted", { text: "Restricted records are logged" }), h("div#audit-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the log" })))));
+    p.appendChild(h("div.stack.stack--4",
+      card("Shifts: who signed in and out", h("span.chip.chip--restricted", { text: "Photos taken at sign-in and sign-out" }), h("div#shift-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the shift record" })))),
+      card("Who opened what", h("span.chip.chip--restricted", { text: "Restricted records are logged" }), h("div#audit-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the log" }))))));
+    try {
+      const sh = (await api("/api/staff/shifts")).shifts;
+      const box = $("shift-body"); if (box) {
+        clear(box);
+        box.appendChild(h("p.muted.text-sm", { text: "Every officer gives an officer ID and a photo when they sign in and again when they sign out. Opening a photo is written to the access log below." }));
+        box.appendChild(h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Officer ID", "Section", "Signed in", "Signed out", "Photos"].map((x) => h("th", { scope: "col", text: x })))),
+          h("tbody", ...sh.map((x) => h("tr", h("th", { scope: "row", text: x.officer_id }), h("td", { text: x.section_label }), h("td", { text: fmtTime(x.in_at) }),
+            h("td", { text: x.out_at ? fmtTime(x.out_at) : "On shift" }),
+            h("td", x.has_in_photo ? h("button.btn.btn--ghost", { type: "button", onclick: () => showShiftPhoto(x, "in") }, "In") : (x.in_photo_missing ? h("span.chip.chip--warning", { text: "In: no photo" }) : h("span.muted", { text: x.synthetic ? "none (demo data)" : "none" })),
+              x.has_out_photo ? h("button.btn.btn--ghost", { type: "button", onclick: () => showShiftPhoto(x, "out") }, "Out") : (x.out_photo_missing ? h("span.chip.chip--warning", { text: "Out: no photo" }) : null))))))));
+      }
+    } catch (e) { const b = $("shift-body"); if (b) { clear(b); b.appendChild(h("p.error-line", { text: e.message })); } }
     try {
       const a = await api("/api/staff/audit");
       const body = $("audit-body"); if (!body) return;
       clear(body);
-      body.appendChild(h("p.muted.text-sm", { text: "Every time a GBV, SOS or tip record is opened, and every action that changes a file, is written here with the officer ID and the time. This is what an oversight body would ask to see." }));
+      body.appendChild(h("p.muted.text-sm", { text: "Every time a GBV, SOS or tip record is opened, and every action that changes a file, is written here with the officer and the time. This is what an oversight body would ask to see." }));
       body.appendChild(h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Time", "Who", "Role", "Action", "Record", "Detail"].map((x) => h("th", { scope: "col", text: x })))),
         h("tbody", ...a.audit.slice(0, 120).map((r) => h("tr", h("td", { text: fmtTime(r.at) }), h("td", { text: r.actor }), h("td", { text: r.role }), h("td", { text: r.action }), h("td", h("span.ref", { text: r.target || "" })), h("td", { text: r.detail || "" })))))));
     } catch (e) { const body = $("audit-body"); if (body) { clear(body); body.appendChild(h("p.error-line", { text: e.message })); } }
+  }
+  async function showShiftPhoto(x, which) {
+    try {
+      const r = await api(`/api/staff/shift-photo/${x.id}/${which}`);
+      await ask({ title: x.officer_id + ", " + (which === "in" ? "signed in" : "signed out"), body: x.section_label + " · " + fmtTime(which === "in" ? x.in_at : x.out_at), ok: "Close", noCancel: true,
+        node: h("img", { src: r.data_url, alt: "Photo of " + x.officer_id, style: "width:100%;max-width:20rem;border-radius:var(--radius-md)" }) });
+    } catch (e) { toast(e.message, "error"); }
   }
 
   // ------------------------------------------------------------------ daily brief

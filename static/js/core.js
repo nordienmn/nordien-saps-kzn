@@ -180,5 +180,24 @@
     });
   }
 
-  window.SAPS = { h, append, clear, icon, api, poll, fmtAge, fmtTime, fmtClock, announce, sound, store, shrinkImage };
+  /** A selfie camera for the sign-in and sign-out photos. Nothing is kept unless the officer presses the button. */
+  const camera = {
+    stream: null,
+    async start(video) {
+      this.stop();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("no camera");
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 } }, audio: false });
+      video.srcObject = this.stream;
+      await video.play();
+    },
+    snap(video, maxW) {
+      const w = video.videoWidth || 640, h = video.videoHeight || 480, scale = Math.min(1, (maxW || 360) / w);
+      const c = document.createElement("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+      c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", 0.72);
+    },
+    stop() { if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; } },
+  };
+
+  window.SAPS = { camera, h, append, clear, icon, api, poll, fmtAge, fmtTime, fmtClock, announce, sound, store, shrinkImage };
 })();

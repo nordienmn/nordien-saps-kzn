@@ -57,6 +57,10 @@ def current():
     return session.get("role"), session.get("officer", "")
 
 
+def section():
+    return session.get("section")
+
+
 def login_required(*roles):
     def deco(fn):
         @wraps(fn)

@@ -19,9 +19,14 @@ def client(monkeypatch):
     return c
 
 
-def login(c, role="desk", password=None, officer="OP-12"):
+import base64
+
+PHOTO = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8" + b"0" * 40).decode()
+
+
+def login(c, role="desk", password=None, section="desk", officer="OP-12", photo=PHOTO):
     pw = password or {"desk": "desk-pass", "board": "board-pass"}[role]
-    return c.post("/api/auth/login", json={"role": role, "officer": officer, "password": pw})
+    return c.post("/api/auth/login", json={"role": role, "section": section, "officer": officer, "photo": photo, "password": pw})
 
 
 UMLAZI = {"lat": -29.9697, "lon": 30.8864}
@@ -80,7 +85,7 @@ def test_anonymous_tip_stores_no_identity_and_returns_a_code(client):
     tip = client.store.get("tips", r.json["ref"])
     assert "name" not in tip and "mobile" not in tip and "ip" not in tip
     assert r.json["code"] not in str(tip)  # only the hash is kept
-    login(client)
+    login(client, section="tip_line")
     assert client.get(f"/api/staff/tip-code/{r.json['code']}").json["ref"] == r.json["ref"]
 
 
@@ -125,8 +130,20 @@ def test_wrong_password_and_switched_off_login(client, monkeypatch):
     assert login(client, "board").status_code == 503
 
 
-def test_desk_needs_officer_id(client):
-    assert client.post("/api/auth/login", json={"role": "desk", "officer": "", "password": "desk-pass"}).status_code == 422
+def test_desk_login_needs_section_officer_id_and_a_photo(client):
+    base = {"role": "desk", "password": "desk-pass", "officer": "OP-12", "photo": PHOTO}
+    assert client.post("/api/auth/login", json={**base, "section": None}).status_code == 422
+    assert client.post("/api/auth/login", json={**base, "section": "kitchen"}).status_code == 422
+    assert client.post("/api/auth/login", json={**base, "section": "gbv", "officer": ""}).status_code == 422
+    assert client.post("/api/auth/login", json={**base, "section": "gbv", "photo": ""}).status_code == 422
+    flagged = client.post("/api/auth/login", json={**base, "section": "gbv", "photo": "", "no_camera": True})  # camera would not start
+    assert flagged.status_code == 200
+    assert client.post("/api/auth/login", json={**base, "section": "gbv", "photo": "data:image/jpeg;base64,AAAA"}).status_code == 422
+    ok = client.post("/api/auth/login", json={**base, "section": "gbv"})
+    assert ok.status_code == 200 and ok.json["officer"] == "OP-12 · GBV desk"
+    anything = client.post("/api/auth/login", json={**base, "section": "gbv", "officer": "Sipho / 0829"})  # any name or number is accepted
+    assert anything.status_code == 200 and anything.json["officer"] == "Sipho / 0829 · GBV desk"
+    assert [x["key"] for x in client.get("/api/auth/me").json["sections"]] == ["call_centre", "desk", "tip_line", "gbv"]
 
 
 def test_board_feed_has_no_personal_details(client):
@@ -139,7 +156,7 @@ def test_board_feed_has_no_personal_details(client):
 
 
 def test_desk_hides_names_of_restricted_cases_and_logs_opening_them(client):
-    login(client)
+    login(client, section="gbv")
     feed = client.get("/api/staff/feed").json
     gbv = next(c for c in feed["cases"] if c["restricted"])
     assert gbv["name"] == ""
@@ -170,7 +187,7 @@ def test_call_lifecycle(client):
     cid, t = start["id"], start["ctoken"]
     assert client.get(f"/api/c/call/{cid}/state?t={t}").json["state"] == "ringing"
     assert client.get(f"/api/c/call/{cid}/state?t=wrong").status_code == 422
-    login(client)
+    login(client, section="call_centre")
     assert client.post(f"/api/staff/case/{cid}/answer", json={}).json["transport"] == "text"
     assert client.post(f"/api/c/call/{cid}/line", json={"t": t, "text": "I need help"}).status_code == 200
     assert client.post(f"/api/staff/case/{cid}/line", json={"text": "Where are you?"}).status_code == 200
@@ -184,20 +201,20 @@ def test_call_lifecycle(client):
 
 def test_second_answer_is_refused(client):
     cid = client.post("/api/c/call/start", json={"mode": "voice"}).json["id"]
-    login(client)
+    login(client, section="call_centre")
     client.post(f"/api/staff/case/{cid}/answer", json={})
     assert client.post(f"/api/staff/case/{cid}/answer", json={}).status_code == 422
 
 
 def test_cannot_close_a_file_with_a_live_call(client):
     cid = client.post("/api/c/call/start", json={"mode": "voice"}).json["id"]
-    login(client)
+    login(client, section="call_centre")
     assert client.post(f"/api/staff/case/{cid}/action", json={"action": "close"}).status_code == 422
 
 
 # ---------------------------------------------------------------- referrals and tips
 def test_referral_consent_gate(client):
-    login(client)
+    login(client, section="gbv")
     r = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "call", "mobile": "0600000333", "name": "Nomsa", **UMLAZI})
     cid = r.json["id"]
     no = client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "tcc-gizenga", "consent_to_share": False}).json["referral"]
@@ -232,7 +249,7 @@ def test_every_tip_reaches_hq_for_oversight_before_the_desk_touches_it(client):
 
 def test_desk_must_verify_before_referring_a_tip_to_hq(client):
     tip, _ = new_tip(client)
-    login(client)
+    login(client, section="tip_line")
     assert client.post(f"/api/staff/tip/{tip}/refer-hq", json={}).status_code == 422
     assert client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified"}).status_code == 422  # needs a note
     assert client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Matched a known address."}).json["status"] == "verified"
@@ -241,7 +258,7 @@ def test_desk_must_verify_before_referring_a_tip_to_hq(client):
 
 def test_verified_referral_shows_as_hq_action_and_hq_can_direct_and_close(client):
     tip, code = new_tip(client)
-    login(client)
+    login(client, section="tip_line")
     client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Checked."})
     client.post(f"/api/staff/tip/{tip}/refer-hq", json={})
     login(client, "board")
@@ -258,7 +275,7 @@ def test_verified_referral_shows_as_hq_action_and_hq_can_direct_and_close(client
 
 def test_desk_cannot_close_a_tip_that_is_with_hq(client):
     tip, _ = new_tip(client)
-    login(client)
+    login(client, section="tip_line")
     client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Checked."})
     client.post(f"/api/staff/tip/{tip}/refer-hq", json={})
     assert client.post(f"/api/staff/tip/{tip}/close", json={"outcome": "no_action"}).status_code == 422
@@ -339,7 +356,7 @@ def test_live_call_ends_itself_after_one_minute(client):
 
     start = client.post("/api/c/call/start", json={"mode": "voice"}).json
     cid, t = start["id"], start["ctoken"]
-    login(client)
+    login(client, section="call_centre")
     client.post(f"/api/staff/case/{cid}/answer", json={})
 
     def age_call(seconds):
@@ -395,7 +412,7 @@ def test_upload_rejects_wrong_type_and_oversize(client):
 
 def test_call_recording_chunks_are_saved_on_the_file(client):
     cid = client.post("/api/c/call/start", json={"mode": "video"}).json["id"]
-    login(client)
+    login(client, section="call_centre")
     client.post(f"/api/staff/case/{cid}/answer", json={})
     assert client.post(f"/api/staff/case/{cid}/recording", data=b"AAAA", headers={"Content-Type": "video/webm"}).json["size"] == 4
     assert client.post(f"/api/staff/case/{cid}/recording", data=b"BBBB", headers={"Content-Type": "video/webm"}).json["size"] == 8
@@ -427,7 +444,7 @@ def test_a_station_gets_its_own_task_page_by_private_link(client):
 
 def test_unit_page_hides_names_of_restricted_files(client):
     cid = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "call", "mobile": "0600000777", "name": "Zinhle", **UMLAZI}).json["id"]
-    login(client)
+    login(client, section="gbv")
     client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi", "unit": "FCS unit"})
     tasks = client.get("/api/unit/st-umlazi/tasks").json["tasks"]  # staff session needs no link
     t = next(x for x in tasks if x["case_id"] == cid)
@@ -436,7 +453,7 @@ def test_unit_page_hides_names_of_restricted_files(client):
 
 def test_referral_partner_page_works_for_partners_too(client):
     cid = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "call", "mobile": "0600000888", **UMLAZI}).json["id"]
-    login(client)
+    login(client, section="gbv")
     client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "tcc-gizenga", "consent_to_share": True, "urgency": "urgent"})
     token = next(p for p in client.get("/api/staff/action-points").json["points"] if p["id"] == "tcc-gizenga")["url"].split("?k=")[1]
     client.post("/api/auth/logout", json={})
@@ -456,3 +473,58 @@ def test_a_bad_profile_photo_never_blocks_a_call_or_report(client):
 def test_csp_allows_the_map_tile_host(client):
     csp = client.get("/api/c/config").headers["Content-Security-Policy"]
     assert "https://tile.openstreetmap.org" in csp
+
+
+
+def test_each_section_sees_only_its_own_work(client):
+    login(client, section="call_centre")
+    kinds = {c["kind"] for c in client.get("/api/staff/feed").json["cases"]}
+    assert kinds <= {"call"} and client.get("/api/staff/feed").json["tips"] == []
+    login(client, section="desk")
+    kinds = {c["kind"] for c in client.get("/api/staff/feed").json["cases"]}
+    assert kinds <= {"crime", "area"} and "crime" in kinds
+    login(client, section="gbv")
+    feed = client.get("/api/staff/feed").json
+    assert {c["kind"] for c in feed["cases"]} <= {"gbv", "sos"} and feed["tips"] == []
+    login(client, section="tip_line")
+    feed = client.get("/api/staff/feed").json
+    assert feed["cases"] == [] and len(feed["tips"]) >= 5
+
+
+def test_a_section_cannot_open_or_change_another_sections_files(client):
+    crime = client.post("/api/c/report", json={"kind": "crime", "type": "theft", **UMLAZI}).json["id"]
+    gbv = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "none", **UMLAZI}).json["id"]
+    tip = client.post("/api/c/report", json={"kind": "tip", "type": "drugs", **UMLAZI}).json["ref"]
+    login(client, section="gbv")
+    assert client.get(f"/api/staff/case/{gbv}").status_code == 200
+    assert client.get(f"/api/staff/case/{crime}").status_code == 403
+    assert client.post(f"/api/staff/case/{crime}/action", json={"action": "accept"}).status_code == 403
+    assert client.get(f"/api/staff/tip/{tip}").status_code == 403
+    login(client, section="desk")
+    assert client.get(f"/api/staff/case/{gbv}").status_code == 403
+    assert client.get(f"/api/staff/case/{crime}").status_code == 200
+    login(client, section="tip_line")
+    assert client.get(f"/api/staff/tip/{tip}").status_code == 200
+    assert client.get(f"/api/staff/case/{crime}").status_code == 403
+
+
+
+def test_shift_record_has_officer_id_and_photos_in_and_out_and_hq_can_view_it(client):
+    login(client, section="call_centre", officer="Thandi Mkhize")
+    assert client.post("/api/auth/logout", json={"photo": PHOTO}).status_code == 200
+    login(client, section="desk", officer="4471")
+    assert client.post("/api/auth/logout", json={}).status_code == 200  # signed out without a photo: recorded and flagged
+    assert client.get("/api/staff/shifts").status_code == 401  # a desk officer cannot read the shift log
+    login(client, "board")
+    shifts = client.get("/api/staff/shifts").json["shifts"]
+    first = next(x for x in shifts if x["officer_id"] == "Thandi Mkhize")
+    second = next(x for x in shifts if x["officer_id"] == "4471")
+    assert first["has_in_photo"] and first["has_out_photo"] and first["out_at"] and first["section_label"] == "Call centre"
+    assert second["out_photo_missing"] is True and second["has_out_photo"] is False
+    assert client.get(f"/api/staff/shift-photo/{first['id']}/in").json["data_url"].startswith("data:image/jpeg")
+    assert any(a["action"] == "shift.photo.view" for a in client.store.all("audit"))
+
+
+def test_photo_requirement_can_be_switched_off_for_a_laptop_with_no_camera(client, monkeypatch):
+    monkeypatch.setattr(Config, "REQUIRE_SIGNIN_PHOTO", False)
+    assert login(client, photo="").status_code == 200

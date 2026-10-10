@@ -940,11 +940,37 @@ def _tip_summary(tip, role, lang="en"):
     }
 
 
-def feed(store, role):
+# The four sections of the control room. Each officer signs in to ONE section and sees only that section's work.
+SECTIONS = {
+    "call_centre": {"label": "Call centre", "kinds": {"call"}, "tips": False},
+    "desk": {"label": "Desk", "kinds": {"crime", "area"}, "tips": False},
+    "tip_line": {"label": "Tip-off line", "kinds": set(), "tips": True},
+    "gbv": {"label": "GBV desk", "kinds": {"gbv", "sos"}, "tips": False},
+}
+
+
+def section_options():
+    return [{"key": k, "label": v["label"]} for k, v in SECTIONS.items()]
+
+
+def section_allows_case(section, case):
+    return section in SECTIONS and case["kind"] in SECTIONS[section]["kinds"]
+
+
+def section_allows_tips(section):
+    return section in SECTIONS and SECTIONS[section]["tips"]
+
+
+def feed(store, role, section=None):
     expire_calls(store)
     cases = sorted(store.all("cases"), key=lambda c: -c["created_at"])
     tips = sorted(store.all("tips"), key=lambda t: -t["created_at"])
     refs = store.all("referrals")
+    if role == "desk":
+        cases = [c for c in cases if section_allows_case(section, c)]
+        tips = tips if section_allows_tips(section) else []
+        ids = {c["id"] for c in cases} | {t["id"] for t in tips}
+        refs = [r for r in refs if r["case_id"] in ids]
     out = {
         "version": store.snapshot_version(),
         "now": now(),
@@ -1225,3 +1251,35 @@ def ap_load(store):
             row["open"] += 1
             row["urgent"] += 1 if r["urgency"] == "urgent" else 0
     return load
+
+
+# ----------------------------------------------------------------------------- shifts: who is on, with a photo in and out
+def start_shift(store, section, officer_id, photo):
+    sid = f"S{store.next_seq('shift'):05d}"
+    t = now()
+    store.put("shifts", {
+        "id": sid, "section": section, "section_label": SECTIONS[section]["label"], "officer_id": officer_id,
+        "in_at": t, "out_at": None, "has_in_photo": bool(photo), "in_photo_missing": not photo, "has_out_photo": False, "out_photo_missing": False,
+    })
+    if photo:
+        store.put("media", {"id": f"{sid}-in", "case_id": sid, "type": "shift_photo", "data_url": _check_image(photo, MAX_FACE_BYTES)})
+    return sid
+
+
+def end_shift(store, shift_id, photo):
+    def fn(sh):
+        if sh["out_at"] is None:
+            sh["out_at"] = now()
+            sh["has_out_photo"] = bool(photo)
+            sh["out_photo_missing"] = not photo  # signed out without a photo: flagged for HQ
+    sh = store.patch("shifts", shift_id, fn)
+    if sh and photo:
+        try:
+            store.put("media", {"id": f"{shift_id}-out", "case_id": shift_id, "type": "shift_photo", "data_url": _check_image(photo, MAX_FACE_BYTES)})
+        except Invalid:
+            store.patch("shifts", shift_id, lambda x: x.update(has_out_photo=False, out_photo_missing=True))
+    return sh
+
+
+def list_shifts(store):
+    return sorted(store.all("shifts"), key=lambda x: -x["in_at"])[:100]

@@ -13,7 +13,7 @@ Flask + gunicorn, Jinja templates, vanilla JS (no build step), one design system
 | Page | Who | Notes |
 |---|---|---|
 | `/citizen` (`/`) | public, phone | POPIA notice, English and isiZulu, Emergency ("Calling 10111"), crime report (photos, video, location, map pin), GBV help, anonymous tip with a one-time code, unsafe place, profile |
-| `/desk` | officers | Officer ID + desk password. Doors: Calls, Crime, GBV, Tip-off line, Infrastructure. Drag a file onto a box (Flying Squad, stations, units, partners) to send it for action |
+| `/desk` | officers | Sign in by choosing a SECTION (1 Call centre, 2 Desk = crime + unsafe places, 3 Tip-off line, 4 GBV), any name or number as officer ID, a live camera photo, and the password. Each section sees only its own files (enforced on the server). A photo is taken again at sign-out; both go in the shift record HQ can review. Drag a file onto a box (Flying Squad, stations, units, partners) to send it for action |
 | `/commissioner` | HQ | Board password. Needs-HQ-action list, anonymous tip oversight, deployments, crime and people (gender, age), referrals and directions, performance, access log, daily brief |
 | `/weather` | public, phone | Hidden GBV door. Hold or double-tap the weather icon, confirm, triage, quick exit |
 | `/unit` and `/unit/<id>?k=<token>` | stations, units, partners | Each action point's own page by private link. Shows only its tasks. Acknowledge, on scene, cleared / complete |
@@ -38,6 +38,9 @@ Old addresses (`/headoffice`, `/brief`, `/municipality`, `/flying`, `/partner` .
 - Pages render citizen text with `textContent` only. Never `innerHTML` with data.
 - Captions are browser speech or typed text and are never labelled AI. "This call is recorded" is shown only when the server reports a recording is really running.
 - An optional profile photo can never block a call or report.
+- Desk sections are isolated: a section cannot read or change another section's files (`saps.api._case_gate`, `_tip_gate`). The audit log names the officer and section.
+- Sign-in photo is taken live with the camera (no file picker). If the camera cannot start the officer may sign in without it, and that is flagged in the shift record. `REQUIRE_SIGNIN_PHOTO=0` switches the requirement off.
+- Demo decision (owner): ALL passwords are `0000` (desk and board) and any name or number is accepted as an officer ID. This is a demo with synthetic data.
 - No secrets in code. All config is environment variables (see `.env.example`).
 
 ## Run locally

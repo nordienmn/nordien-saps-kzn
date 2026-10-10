@@ -145,6 +145,8 @@ def citizen_upload():
 @bp.post("/staff/case/<cid>/recording")
 @security.login_required("desk")
 def call_recording(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     chunk = request.get_data(cache=False)
     if not chunk or len(chunk) > 4 * 1024 * 1024:
@@ -157,6 +159,9 @@ def call_recording(cid):
 @security.login_required("desk")
 def staff_blob(mid):
     _, officer = security.current()
+    meta = store().get("media", mid)
+    if meta and (g := _case_gate(meta["case_id"])):
+        return g
     found = service.blob_for(store(), mid, officer)
     if found is None:
         return jsonify({"error": "Not found."}), 404
@@ -214,21 +219,35 @@ def login():
     if not ok:
         service.audit(store(), "unknown", role, "login.failed")
         return jsonify({"error": "That password is not right."}), 401
-    officer = str(data.get("officer") or "").strip().upper()
-    if role == "desk" and not security.OFFICER_RE.match(officer):
-        raise service.Invalid("Enter your officer ID (letters, numbers, dash).", "officer")
-    if role == "board":
-        officer = officer if security.OFFICER_RE.match(officer) else "EXEC"
+    section, shift_id = None, ""
+    if role == "desk":
+        section = str(data.get("section") or "")
+        if section not in service.SECTIONS:
+            raise service.Invalid("Choose your section.", "section")
+        officer_id = service.clean(data.get("officer"), 40)  # demo: any name or number is accepted, kept as typed
+        if not officer_id:
+            raise service.Invalid("Enter your name or number.", "officer")
+        photo = data.get("photo") or ""
+        no_camera = bool(data.get("no_camera"))  # the officer's camera would not start; recorded and flagged for HQ
+        if Config.REQUIRE_SIGNIN_PHOTO and not photo and not no_camera:
+            raise service.Invalid("Take your sign-in photo first.", "photo")
+        shift_id = service.start_shift(store(), section, officer_id, photo)
+        officer = f"{officer_id} · {service.SECTIONS[section]['label']}"
+    else:
+        officer = "HQ"
     session.clear()
-    session.update({"role": role, "officer": officer})
+    session.update({"role": role, "officer": officer, "section": section, "shift": shift_id})
     session.permanent = False
     service.audit(store(), officer, role, "login")
-    return jsonify({"ok": True, "role": role, "officer": officer})
+    return jsonify({"ok": True, "role": role, "officer": officer, "section": section})
 
 
 @bp.post("/auth/logout")
 def logout():
     role, officer = security.current()
+    if role == "desk" and session.get("shift"):
+        photo = (request.get_json(silent=True) or {}).get("photo") or ""
+        service.end_shift(store(), session["shift"], photo)
     if role:
         service.audit(store(), officer, role, "logout")
     session.clear()
@@ -239,10 +258,33 @@ def logout():
 def me():
     role, officer = security.current()
     return jsonify({
-        "role": role, "officer": officer,
+        "role": role, "officer": officer, "section": security.section(), "require_photo": Config.REQUIRE_SIGNIN_PHOTO,
+        "sections": service.section_options(),
         "video": Config.video_enabled(), "whatsapp": Config.whatsapp_enabled(),
         "login_desk": bool(Config.DESK_PASSWORD), "login_board": bool(Config.BOARD_PASSWORD),
     })
+
+
+def _deny(msg="That file belongs to another section."):
+    return jsonify({"error": msg}), 403
+
+
+def _case_gate(cid):
+    """Desk officers may only open and change files that belong to their section. HQ is not limited."""
+    role, _ = security.current()
+    if role != "desk":
+        return None
+    case = store().get("cases", cid)
+    if case is None:
+        return jsonify({"error": "Not found."}), 404
+    return None if service.section_allows_case(security.section(), case) else _deny()
+
+
+def _tip_gate():
+    role, _ = security.current()
+    if role == "desk" and not service.section_allows_tips(security.section()):
+        return _deny("Tips belong to the tip-off line.")
+    return None
 
 
 # ============================================================================ staff
@@ -254,12 +296,14 @@ def staff_feed():
     since = request.args.get("since", type=int)
     if since is not None and since == s.snapshot_version():
         return jsonify({"unchanged": True, "version": since, "now": service.now()})
-    return jsonify(service.feed(s, role))
+    return jsonify(service.feed(s, role, security.section()))
 
 
 @bp.get("/staff/case/<cid>")
 @security.login_required("desk")
 def staff_case(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     detail = service.case_detail(store(), cid, officer)
     if detail is None:
@@ -270,6 +314,8 @@ def staff_case(cid):
 @bp.get("/staff/tip/<tid>")
 @security.login_required("desk", "board")
 def staff_tip(tid):
+    if (g := _tip_gate()):
+        return g
     role, officer = security.current()
     detail = service.tip_detail(store(), tid, officer, role)
     if detail is None:
@@ -280,6 +326,8 @@ def staff_tip(tid):
 @bp.get("/staff/tip-code/<code>")
 @security.login_required("desk")
 def tip_code(code):
+    if (g := _tip_gate()):
+        return g
     tip = service.check_tip_code(store(), code)
     if not tip:
         return jsonify({"error": "No tip has that code."}), 404
@@ -289,6 +337,8 @@ def tip_code(code):
 @bp.post("/staff/case/<cid>/action")
 @security.login_required("desk")
 def staff_action(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     case = service.act(store(), cid, officer, body())
     return jsonify({"ok": True, "status": case["status"]})
@@ -297,6 +347,8 @@ def staff_action(cid):
 @bp.post("/staff/case/<cid>/line")
 @security.login_required("desk")
 def staff_line(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     data = body()
     case = store().get("cases", cid)
@@ -309,6 +361,8 @@ def staff_line(cid):
 @bp.post("/staff/case/<cid>/answer")
 @security.login_required("desk")
 def staff_answer(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     data = body()
     want_video = bool(data.get("video")) and Config.video_enabled()
@@ -331,6 +385,8 @@ def staff_answer(cid):
 @bp.post("/staff/case/<cid>/end")
 @security.login_required("desk")
 def staff_end(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     service.end_call(store(), cid, officer, "the officer")
     return jsonify({"ok": True})
@@ -339,6 +395,8 @@ def staff_end(cid):
 @bp.post("/staff/case/<cid>/dispatch")
 @security.login_required("desk")
 def staff_dispatch(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     dep = service.dispatch(store(), cid, officer, body())
     return jsonify({"ok": True, "deployment": dep})
@@ -347,6 +405,8 @@ def staff_dispatch(cid):
 @bp.post("/staff/case/<cid>/deployment/<did>")
 @security.login_required("desk")
 def staff_deployment(cid, did):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     service.update_deployment(store(), cid, did, officer, body().get("status"))
     return jsonify({"ok": True})
@@ -355,6 +415,8 @@ def staff_deployment(cid, did):
 @bp.post("/staff/case/<cid>/refer")
 @security.login_required("desk")
 def staff_refer(cid):
+    if (g := _case_gate(cid)):
+        return g
     _, officer = security.current()
     ref = service.create_referral(store(), cid, officer, body())
     return jsonify({"ok": True, "referral": ref})
@@ -371,6 +433,8 @@ def staff_referral(rid):
 @bp.post("/staff/tip/<tid>/verify")
 @security.login_required("desk")
 def staff_tip_verify(tid):
+    if (g := _tip_gate()):
+        return g
     _, officer = security.current()
     tip = service.verify_tip(store(), tid, officer, body())
     return jsonify({"ok": True, "status": tip["status"]})
@@ -379,6 +443,8 @@ def staff_tip_verify(tid):
 @bp.post("/staff/tip/<tid>/action")
 @security.login_required("desk")
 def staff_tip_action(tid):
+    if (g := _tip_gate()):
+        return g
     _, officer = security.current()
     service.action_tip(store(), tid, officer, body().get("note"))
     return jsonify({"ok": True})
@@ -387,6 +453,8 @@ def staff_tip_action(tid):
 @bp.post("/staff/tip/<tid>/refer-hq")
 @security.login_required("desk")
 def staff_tip_refer_hq(tid):
+    if (g := _tip_gate()):
+        return g
     _, officer = security.current()
     tip = service.refer_tip_to_hq(store(), tid, officer, body().get("note", ""))
     return jsonify({"ok": True, "status": tip["status"]})
@@ -395,6 +463,8 @@ def staff_tip_refer_hq(tid):
 @bp.post("/staff/tip/<tid>/close")
 @security.login_required("desk", "board")
 def staff_tip_close(tid):
+    if (g := _tip_gate()):
+        return g
     role, officer = security.current()
     tip = service.close_tip(store(), tid, officer or "EXEC", body().get("outcome"), role)
     return jsonify({"ok": True, "status": tip["status"]})
@@ -421,6 +491,9 @@ def staff_partners():
 @security.login_required("desk")
 def staff_media(mid):
     _, officer = security.current()
+    meta = store().get("media", mid)
+    if meta and (g := (_case_gate(meta["case_id"]) if store().get("cases", meta["case_id"]) else _tip_gate())):
+        return g
     m = store().get("media", mid)
     if m is None:
         return jsonify({"error": "Not found."}), 404
@@ -455,6 +528,25 @@ def staff_direct():
     data = body()
     ref = service.create_direction(store(), str(data.get("target_id") or ""), officer or "EXEC", data)
     return jsonify({"ok": True, "direction": ref})
+
+
+@bp.get("/staff/shifts")
+@security.login_required("board")
+def staff_shifts():
+    return jsonify({"shifts": service.list_shifts(store())})
+
+
+@bp.get("/staff/shift-photo/<sid>/<which>")
+@security.login_required("board")
+def staff_shift_photo(sid, which):
+    if which not in ("in", "out"):
+        return jsonify({"error": "Not found."}), 404
+    m = store().get("media", f"{sid}-{which}")
+    if m is None:
+        return jsonify({"error": "No photo."}), 404
+    _, officer = security.current()
+    service.audit(store(), officer or "HQ", "board", "shift.photo.view", sid, which)
+    return jsonify({"data_url": m["data_url"]})
 
 
 @bp.get("/staff/partner/<pid>")

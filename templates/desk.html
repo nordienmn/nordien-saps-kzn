@@ -16,9 +16,30 @@
     <div class="card login__card">
       <div class="brand"><span class="brand__seal"><img src="/static/img/badge.png" alt=""></span><span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Control room desk</span></span></div>
       <h1 class="login__title">Sign in</h1>
-      <p class="muted">One window, five doors. Your officer ID is written on everything you do.</p>
+      <p class="muted">Choose your section and enter the password. You will see only that section's work.</p>
       <form class="stack stack--4" id="login-form" novalidate>
-        <div class="field"><label class="field__label" for="officer">Officer ID</label><input class="input" id="officer" autocomplete="username" maxlength="12" placeholder="OP-12" required></div>
+        <div class="field"><label class="field__label" for="section">Section</label>
+          <select class="select" id="section" required>
+            <option value="call_centre">1. Call centre</option>
+            <option value="desk">2. Desk</option>
+            <option value="tip_line">3. Tip-off line</option>
+            <option value="gbv">4. GBV</option>
+          </select></div>
+        <div class="field"><label class="field__label" for="officer">Officer ID (any name or number)</label><input class="input" id="officer" autocomplete="off" maxlength="40" placeholder="For example Thandi, 4471 or OP-12" required></div>
+        <div class="field" id="photo-field">
+          <span class="field__label" id="photo-l">Sign-in photo</span>
+          <div class="selfie" aria-describedby="photo-h">
+            <video id="selfie-v" autoplay muted playsinline></video>
+            <img id="selfie-img" alt="Your sign-in photo" hidden>
+          </div>
+          <p class="field__hint" id="photo-h">Taken now. It is kept in the shift record with your sign-in time, and again when you sign out.</p>
+          <p class="error-line" id="photo-err" role="alert" hidden></p>
+          <span class="chip-row">
+            <button type="button" class="btn btn--secondary" id="selfie-take" aria-describedby="photo-l">{{ icon('camera') }}<span>Take photo</span></button>
+            <button type="button" class="btn btn--ghost" id="selfie-retake" hidden>Retake</button>
+            <button type="button" class="btn btn--ghost" id="no-camera" hidden>Sign in without a photo (flagged)</button>
+          </span>
+        </div>
         <div class="field"><label class="field__label" for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
         <p class="error-line" id="login-error" role="alert" hidden></p>
         <button class="btn btn--primary btn--lg btn--block" type="submit" id="login-btn">Enter the desk</button>
@@ -36,7 +57,7 @@
     <header class="app-header app-header--ops" style="flex-wrap:wrap">
       <a class="brand" href="/desk" aria-label="SAPS KZN control room desk">
         <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
-        <span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Control room desk</span></span>
+        <span><span class="brand__name">SAPS KZN</span><span class="brand__sub" id="section-name">Control room desk</span></span>
       </a>
       <div class="segmented tabs" role="tablist" aria-label="Doors" id="doors">
         <button type="button" class="segmented__btn" role="tab" data-door="calls" aria-selected="true">Calls <span class="segmented__count segmented__count--alert" id="n-calls">0</span></button>
@@ -48,7 +69,7 @@
       <div class="app-header__actions">
         <button type="button" class="btn btn--ghost" id="alerts" aria-pressed="false">{{ icon('bell') }}<span id="alerts-l">Alerts off</span></button>
         <span class="officer"><span class="officer__dot" aria-hidden="true"></span><span id="officer-id"></span></span>
-        <button type="button" class="btn btn--ghost" id="logout">{{ icon('exit') }}<span>Sign out</span></button>
+        <button type="button" class="btn btn--ghost" id="logout">{{ icon('exit') }}<span>Switch section</span></button>
       </div>
     </header>
   </div>
@@ -74,6 +95,21 @@
     </main>
   </div>
 </div>
+
+<dialog class="dialog" id="out-dlg" aria-labelledby="out-title">
+  <div class="dialog__accent"></div>
+  <div class="dialog__body">
+    <h2 class="dialog__title" id="out-title">Sign out</h2>
+    <p class="muted">Take your photo to close your shift. It is kept in the shift record with the time.</p>
+    <div class="selfie"><video id="out-v" autoplay muted playsinline></video><img id="out-img" alt="Your sign-out photo" hidden></div>
+    <p class="error-line" id="out-err" role="alert" hidden></p>
+  </div>
+  <div class="dialog__foot">
+    <button type="button" class="btn btn--primary btn--lg btn--block" id="out-take">Take photo and sign out</button>
+    <button type="button" class="btn btn--ghost btn--block" id="out-skip" hidden>Sign out without a photo (this is flagged)</button>
+    <button type="button" class="btn btn--ghost btn--block" id="out-cancel">Stay signed in</button>
+  </div>
+</dialog>
 
 <dialog class="dialog" id="act-dlg" aria-labelledby="act-title">
   <div class="dialog__accent"></div>

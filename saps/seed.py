@@ -101,7 +101,7 @@ def seed(store):
     rng = random.Random(2026)
     t = now()
     service.seed_partners(store)
-    officers = ["OP-12", "OP-07", "OP-21", "OP-33"]
+    officers = ["Desk"]
 
     # ---- crime cases over the last six days
     crimes = []
@@ -136,9 +136,9 @@ def seed(store):
         case = service.create_case(store, {"kind": "area", "type": key, "lat": lat, "lon": lon, "address": place, "note": ""}, synthetic=True, created_at=t - rng.uniform(0.5 * DAY, 5 * DAY))
         if i < 2:
             partner = "mun-ethekwini-lights" if key in ("broken_light", "dark_street") else "mun-ethekwini-parks"
-            ref = service.create_referral(store, case["id"], "OP-07", {"partner_id": partner}, synthetic=True)
+            ref = service.create_referral(store, case["id"], "Desk", {"partner_id": partner}, synthetic=True)
             if i == 0:
-                service.update_referral(store, ref["id"], "OP-07", "acknowledged")
+                service.update_referral(store, ref["id"], "Desk", "acknowledged")
 
     # ---- GBV: one urgent open, two referred, one closed
     gbv_rows = [
@@ -158,10 +158,10 @@ def seed(store):
         }, synthetic=True, created_at=t - age)
         if status == "referred":
             pid = "tcc-gizenga" if cluster == "inanda" else "shelter-durban"
-            service.create_referral(store, case["id"], "OP-21", {"partner_id": pid, "urgency": "routine", "consent_to_share": pref != "none"}, synthetic=True)
+            service.create_referral(store, case["id"], "GBV desk", {"partner_id": pid, "urgency": "routine", "consent_to_share": pref != "none"}, synthetic=True)
         elif status == "closed":
-            service.create_referral(store, case["id"], "OP-21", {"partner_id": "sw-dsd"}, synthetic=True)
-            _finish(store, case, rng, age, "closed", "OP-21")
+            service.create_referral(store, case["id"], "GBV desk", {"partner_id": "sw-dsd"}, synthetic=True)
+            _finish(store, case, rng, age, "closed", "GBV desk")
 
     # ---- three finished calls, with transcripts
     call_rows = [
@@ -177,13 +177,13 @@ def seed(store):
         secs = rng.randint(70, 240)
 
         def fn(c, started=started, secs=secs, mode=mode, lines=lines):
-            c["call"] = {"state": "ended", "mode": mode, "transport": "demo", "room": "", "started_at": started, "answered_at": started + rng.randint(6, 22), "ended_at": started + secs, "operator": "OP-12", "duration": secs}
+            c["call"] = {"state": "ended", "mode": mode, "transport": "demo", "room": "", "started_at": started, "answered_at": started + rng.randint(6, 22), "ended_at": started + secs, "operator": "Call centre", "duration": secs}
             c["transcript"] = [{"at": started + 10 + n * 15, "who": who, "text": text, "src": "caption"} for n, (who, text) in enumerate(lines)]
             c["status"] = "closed"
-            c["assigned_to"] = "OP-12"
+            c["assigned_to"] = "Call centre"
             c["first_action_at"] = c["call"]["answered_at"]
             c["closed_at"] = started + secs + 600
-            c["timeline"].append({"at": started + secs, "actor": "OP-12", "text": f"Call ended. Duration {secs // 60}:{secs % 60:02d}.", "kind": "call"})
+            c["timeline"].append({"at": started + secs, "actor": "Call centre", "text": f"Call ended. Duration {secs // 60}:{secs % 60:02d}.", "kind": "call"})
 
         store.patch("cases", case["id"], fn)
 
@@ -209,16 +209,16 @@ def seed(store):
             if status in ("closed_desk", "verified", "referred", "acknowledged", "directed"):
                 v_at = ts + 900
                 result = "not_verified" if status == "closed_desk" else "verified"
-                x["verification"] = {"result": result, "by": "OP-12", "at": v_at, "note": "Checked against known incidents and the area."}
-                ev(v_at, "OP-12", ("Verified: " if result == "verified" else "Could not verify: ") + "Checked against known incidents and the area.", "verify")
+                x["verification"] = {"result": result, "by": "Tip-off line", "at": v_at, "note": "Checked against known incidents and the area."}
+                ev(v_at, "Tip-off line", ("Verified: " if result == "verified" else "Could not verify: ") + "Checked against known incidents and the area.", "verify")
                 if result == "verified":
                     x["status"] = "verified"
             if status == "closed_desk":
                 x["status"], x["outcome"], x["closed_at"], x["closed_by"] = "closed", "not_verified", ts + 3600, "desk"
-                ev(ts + 3600, "OP-12", "Closed. It could not be verified.", "close")
+                ev(ts + 3600, "Tip-off line", "Closed. It could not be verified.", "close")
             if status in ("referred", "acknowledged", "directed"):
-                x["status"], x["referred_at"], x["referred_by"] = "referred", ts + 1500, "OP-12"
-                ev(ts + 1500, "OP-12", "Verified referral sent to HQ for action.", "refer")
+                x["status"], x["referred_at"], x["referred_by"] = "referred", ts + 1500, "Tip-off line"
+                ev(ts + 1500, "Tip-off line", "Verified referral sent to HQ for action.", "refer")
             if status in ("acknowledged", "directed"):
                 x["status"] = "acknowledged"
                 ev(ts + 2400, "EXEC", "Acknowledged by HQ.", "ack")
@@ -239,5 +239,11 @@ def seed(store):
             })
             store.patch("tips", tip["id"], lambda x, rid=rid: x["referrals"].append(rid))
 
+    # ---- who was on shift today (synthetic: no photos exist for these)
+    for sec, oid, start, length in (("call_centre", "OP-03", 7.0, 8.0), ("call_centre", "OP-18", 15.0, 8.0), ("desk", "OP-12", 6.5, 8.5), ("gbv", "OP-21", 7.0, 8.0), ("tip_line", "OP-09", 8.0, 8.0)):
+        sid = f"S{store.next_seq('shift'):05d}"
+        base_t = t - (t % DAY) + start * HOUR - 2 * HOUR
+        store.put("shifts", {"id": sid, "section": sec, "section_label": service.SECTIONS[sec]["label"], "officer_id": oid, "in_at": base_t,
+                             "out_at": base_t + length * HOUR if base_t + length * HOUR < t else None, "has_in_photo": False, "has_out_photo": False, "out_photo_missing": False, "synthetic": True})
     service.audit(store, "system", "system", "seed", "", "Synthetic demo data loaded.")
     return store

@@ -43,6 +43,8 @@ class Config:
 
     # Demo data
     SEED_ON_START = env("SEED_ON_START", "1") == "1"
+    # Officers give an ID and a photo when they sign in and out. Set to 0 only if a demo laptop has no working camera.
+    REQUIRE_SIGNIN_PHOTO = env("REQUIRE_SIGNIN_PHOTO", "1") == "1"
 
     # Twilio. Everything here is optional; features switch off cleanly without it.
     TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID")
