@@ -21,7 +21,7 @@
       "purpose": "any"
     },
     {
-      "src": "/static/img/weather-512.png",
+      "src": "/static/img/weather-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
