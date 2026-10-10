@@ -26,6 +26,8 @@
   .sos-split button + button { border-left: 1px solid rgba(255,255,255,.35); }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
   .tile, .plain { border: 0; border-radius: 16px; padding: 18px 12px; font-size: 16px; font-weight: 700; }
+  .tip { position: relative; }
+  .tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 8px; right: 8px; bottom: calc(100% + 6px); background: #0a2f6b; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 8px 10px; border-radius: 10px; z-index: 5; }
   .tile { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(10,47,107,.08); }
   .plain { width: 100%; margin-top: 8px; background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(10,47,107,.08); }
   .panel { display: none; margin-top: 12px; background: #fff; border-radius: 16px; padding: 14px; border-top: 4px solid var(--gold); }
@@ -65,12 +67,12 @@
     </div>
     <p class="who" id="em-who" style="margin-top:10px">No profile. The call still goes through.</p>
     <div class="row">
-      <button class="tile" type="button" onclick="openPanel('crime')" id="t-crime">Report a crime</button>
-      <button class="tile" type="button" onclick="openPanel('gbv')" id="t-gbv">GBV help</button>
+      <button class="tile tip" type="button" onclick="openPanel('crime')" id="t-crime" data-tip="A written report. You can add time, place, a description, and a photo or video.">Report a crime</button>
+      <button class="tile tip" type="button" onclick="openPanel('gbv')" id="t-gbv" data-tip="Help for gender-based violence. Social worker, hospital, a call, or transport.">GBV help</button>
     </div>
-    <button class="plain" type="button" onclick="openPanel('anon')" id="t-anon">Report anonymously</button>
+    <button class="plain tip" type="button" onclick="openPanel('anon')" id="t-anon" data-tip="A tip, not a case. No name is stored.">Report anonymously</button>
     <button class="plain" type="button" onclick="openPanel('area')" id="t-area">Report an unsafe area</button>
-    <button class="plain" type="button" onclick="openPanel('profile')" id="t-profile">Create a profile</button>
+    <button class="plain tip" type="button" onclick="openPanel('profile')" id="t-profile" data-tip="Take a photo now. Your name, number and address then fill in on reports and calls.">Create a profile</button>
 
     <div class="panel" id="crime">
       <button class="back" type="button" onclick="back()">← <span data-k="back">Back</span></button>
@@ -153,8 +155,11 @@ const T = {
   en: {
     title: "SAPS KZN", sub: "South African Police Service · KwaZulu-Natal",
     sos: "Emergency", sosSub: "Call 10111, or open a video call",
-    crime: "Report a crime", gbv: "GBV help", anon: "Report anonymously",
+    crime: "Report a crime", crimeTip: "A written report. You can add time, place, a description, and a photo or video.",
+    gbv: "GBV help", gbvTip: "Help for gender-based violence. Social worker, hospital, a call, or transport.",
+    anon: "Report anonymously", anonTip: "A tip, not a case. No name is stored.",
     area: "Report an unsafe area", profile: "Create a profile",
+    profileTip: "Take a photo now. Your name, number and address then fill in on reports and calls.",
     call: "Call", video: "Video call", send: "Send report", tip: "Send tip", help: "Send for help",
     gate: "Before you use this",
     gate1: "This notice is under the Protection of Personal Information Act. What you send is received by the South African Police Service.",
@@ -164,8 +169,11 @@ const T = {
   zu: {
     title: "SAPS KZN", sub: "Amaphoyisa aseNingizimu Afrika · KwaZulu-Natali",
     sos: "Isimo esiphuthumayo", sosSub: "Shayela u-10111, noma uvule ucingo lwevidiyo",
-    crime: "Bika ubugebengu", gbv: "Usizo lwe-GBV", anon: "Bika ungaziwa",
+    crime: "Bika ubugebengu", crimeTip: "Umbiko obhaliwe. Ungafaka isikhathi, indawo, incazelo, nesithombe noma ividiyo.",
+    gbv: "Usizo lwe-GBV", gbvTip: "Usizo lodlame olubhekiswe kubulili. Usoseshini, isibhedlela, ucingo, noma isithuthi.",
+    anon: "Bika ungaziwa", anonTip: "Ithiphu, hhayi icala. Igama aligcinwa.",
     area: "Bika indawo engaphephile", profile: "Dala iphrofayela",
+    profileTip: "Thatha isithombe manje. Igama, inombolo nekheli bese kugcwala emibikweni nasezingongweni.",
     call: "Shayela", video: "Ucingo lwevidiyo", send: "Thumela umbiko", tip: "Thumela ithiphu", help: "Thumela usizo",
     gate: "Ngaphambi kokusebenzisa lokhu",
     gate1: "Lesi saziso singaphansi koMthetho Wokuvikelwa Kolwazi Lomuntu Siqu. Okuthumelayo kutholwa ngamaphoyisa.",
@@ -186,10 +194,14 @@ function setLang(next) {
   document.getElementById("t-sos").textContent = t.sos;
   document.getElementById("t-sos-sub").textContent = t.sosSub;
   document.getElementById("t-crime").textContent = t.crime;
+  document.getElementById("t-crime").dataset.tip = t.crimeTip;
   document.getElementById("t-gbv").textContent = t.gbv;
+  document.getElementById("t-gbv").dataset.tip = t.gbvTip;
   document.getElementById("t-anon").textContent = t.anon;
+  document.getElementById("t-anon").dataset.tip = t.anonTip;
   document.getElementById("t-area").textContent = t.area;
   document.getElementById("t-profile").textContent = t.profile;
+  document.getElementById("t-profile").dataset.tip = t.profileTip;
   document.getElementById("t-call").textContent = t.call;
   document.getElementById("t-video").textContent = t.video;
   document.getElementById("t-send").textContent = t.send;
