@@ -93,7 +93,13 @@
       <label data-k="type">Type of crime</label>
       <select id="crime-type"><option>Armed robbery</option><option>Shooting</option><option>House break-in</option><option>Domestic violence</option><option>GBV</option><option>Suspicious vehicle</option><option>Theft</option></select>
       <label data-k="time">Time</label><input id="crime-time" type="datetime-local" />
-      <label data-k="place">Place</label><input id="crime-where" placeholder="Street, suburb, landmark" />
+      <label data-k="place">Place</label>
+      <div class="loc">
+        <button type="button" class="shot" onclick="here('crime-where','crime-pin')">Current location</button>
+        <button type="button" class="shot" onclick="drop('crime-where','crime-pin')">Drop pin</button>
+      </div>
+      <input id="crime-where" placeholder="Street, suburb, landmark" />
+      <div class="pin" id="crime-pin"></div>
       <label data-k="desc">Description</label><textarea id="crime-text" rows="3" placeholder="What happened"></textarea>
       <label data-k="evidence">Evidence</label>
       <input id="crime-pic" type="file" accept="image/*" capture="environment" />
