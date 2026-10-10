@@ -13,7 +13,7 @@ import hmac
 import re
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import blobs, geo, taxonomy
 from .store import now
@@ -138,20 +138,21 @@ def _save_media(store, case, photos, face, uploads=None):
     return media
 
 
-def add_recording_chunk(store, case_id, officer, chunk):
+def add_recording_chunk(store, case_id, officer, chunk, source="desk"):
     """Desk uploads the call recording in pieces while the call runs. It is saved on the file automatically."""
     case = store.get("cases", case_id)
     if case is None or not case.get("call"):
         raise Invalid("Call not found.")
-    mid = f"{case_id}-rec"
+    mid = f"{case_id}-rec" if source == "desk" else f"{case_id}-recc"
     meta = store.get("media", mid)
     if meta is None:
         key = f"media/{case_id}/{mid}"
-        meta = {"id": mid, "case_id": case_id, "type": "recording", "mime": "video/webm", "size": 0, "storage": "gcs" if blobs._bucket() is not None else "memory", "key": key}
+        meta = {"id": mid, "case_id": case_id, "type": "recording", "source": source, "mime": "video/webm", "size": 0, "storage": "gcs" if blobs._bucket() is not None else "memory", "key": key}
         store.put("media", meta)
+        blobs.put(key, b"", "video/webm")  # always start a file's recording clean (a demo reset restarts the case numbers)
 
         def add(c):
-            c["media"].append({"id": mid, "type": "recording", "size": 0})
+            c["media"].append({"id": mid, "type": "recording", "source": source, "size": 0})
             event(c, officer, "Call recording started and saved to this file.", "call")
 
         store.patch("cases", case_id, add)
@@ -169,6 +170,19 @@ def blob_for(store, media_id, officer):
         return None
     audit(store, officer, "desk", "media.view", meta["case_id"], meta["type"])
     return meta["mime"], blobs.get(meta["key"], meta["storage"])
+
+
+def _default_needs(wants, given, label_key, age_band):
+    """What a GBV file will probably need. The desk can change it. A sexual offence adds the evidence kit and medical care."""
+    if isinstance(given, list):
+        return [k for k in given if k in taxonomy.GBV_NEEDS]
+    needs = ["female_officer", "counsellor"]
+    for w, n in (("hospital", "medical"), ("shelter", "shelter"), ("transport", "transport")):
+        if w in (wants or []):
+            needs.append(n)
+    if label_key == "sexual_offence":
+        needs += ["kit_d7" if age_band == "under_18" else "kit_d1", "medical", "vfr"]
+    return list(dict.fromkeys(needs))
 
 
 def create_case(store, payload, channel="app", synthetic=False, created_at=None):
@@ -189,6 +203,9 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     gender = payload.get("gender") if payload.get("gender") in taxonomy.GENDERS else "undisclosed"
     age_band = payload.get("age_band") if payload.get("age_band") in taxonomy.AGE_BANDS else "undisclosed"
     language = payload.get("lang") if payload.get("lang") in taxonomy.LANGUAGES else "en"
+    home_address = clean(payload.get("home_address"), 120)
+    friend_name = clean(payload.get("friend_name"), 60)
+    registered = bool(payload.get("registered")) or bool(name and mobile)  # a citizen with a profile: the file carries it
     label_key = "other"
     priority = "normal"
     extra = {}
@@ -228,12 +245,12 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
             "wants": wants,
             "know_person": clean(payload.get("know_person"), 6) if payload.get("know_person") in ("yes", "no", "skip") else "skip",
             "contact_pref": contact_pref,
-            "friend": clean(payload.get("friend"), 80),
+            "needs": _default_needs(wants, payload.get("needs"), label_key, payload.get("age_band")),
         })
     elif kind == "sos":
         label_key = "weather_sos"
         priority = "critical"
-        extra["friend"] = clean(payload.get("friend"), 80)
+        extra["needs"] = ["female_officer", "counsellor"]
     elif kind == "area":
         label_key = clean(payload.get("type"), 40)
         if label_key not in taxonomy.AREA_TYPES:
@@ -241,7 +258,8 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         if lat is None and not address:
             raise Invalid("Add a place, or use your current location.", "place")
         priority = "low"
-        name = mobile = ""  # unsafe-area reports never carry a person
+        name = mobile = home_address = friend_name = ""  # unsafe-area reports never carry a person
+        registered = False
     elif kind == "call":
         label_key = "voice_call" if payload.get("mode") != "video" else "video_call"
         priority = "critical"
@@ -268,6 +286,10 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         "gender": gender,
         "age_band": age_band,
         "language": language,
+        "registered": registered,
+        "home_address": home_address,
+        "friend_name": friend_name,
+        "friend": clean(payload.get("friend"), 40) if kind in ("gbv", "sos", "crime", "call") else "",
         "deployments": [],
         "media": [],
         "transcript": [],
@@ -281,6 +303,8 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         "synthetic": synthetic,
     }
     case.update(extra)
+    if case["kind"] == "gbv" and "needs" not in case:
+        case["needs"] = _default_needs([], None, label_key, age_band)
     if not synthetic:
         case["media"] = _save_media(store, case, payload.get("photos") or [], payload.get("face") or "", payload.get("uploads") or [])
     store.put("cases", case)
@@ -642,6 +666,10 @@ def act(store, case_id, officer, payload):
             c["closed_at"] = now()
             c["first_action_at"] = c["first_action_at"] or now()
             event(c, officer, "Closed. " + note if note else "Closed.", "action")
+        elif action == "needs":
+            keys = [k for k in (payload.get("needs") or []) if k in taxonomy.GBV_NEEDS]
+            c["needs"] = keys
+            event(c, officer, "GBV needs set: " + (", ".join(taxonomy.GBV_NEEDS[k] for k in keys) or "none") + ".", "action")
         elif action == "demographics":
             if payload.get("gender") in taxonomy.GENDERS:
                 c["gender"] = payload["gender"]
@@ -679,6 +707,8 @@ def seed_partners(store):
         ("health-clinic", "health", "Nearest community clinic (demo)", "Any"),
         ("sw-dsd", "social_worker", "Department of Social Development, KZN (demo)", "Province"),
         ("sw-fam", "social_worker", "Family support social worker (demo)", "Any"),
+        ("sw-counsellor", "social_worker", "Trauma counsellor on call (demo)", "Any"),
+        ("kit-supply", "forensic_supply", "SAPS Forensic Science: evidence kit supply, D1 and D7 (demo)", "Province"),
         ("ride-demo", "transport", "Victim-support transport (demo)", "Any"),
         ("mun-ethekwini-lights", "municipal", "eThekwini Municipality: Roads and street lighting (demo)", "eThekwini"),
         ("mun-ethekwini-parks", "municipal", "eThekwini Municipality: Parks and public safety (demo)", "eThekwini"),
@@ -703,7 +733,7 @@ def create_referral(store, case_id, officer, payload, synthetic=False):
     if partner["type"] == "municipal" and case["kind"] != "area":
         raise Invalid("Municipal referrals are for unsafe-infrastructure reports.", "partner_id")
     urgency = "urgent" if payload.get("urgency") == "urgent" else "routine"
-    consent = bool(payload.get("consent_to_share"))
+    consent = bool(payload.get("consent_to_share", True))  # demo: the disclaimer covers sharing, so the folder goes with the file
     rid = f"R{store.next_seq('referral'):05d}"
     ref = {
         "id": rid,
@@ -757,7 +787,7 @@ def create_direction(store, target_id, actor, payload):
         target, coll = store.get("tips", target_id), "tips"
     if target is None:
         raise Invalid("That file was not found.")
-    share = bool(payload.get("consent_to_share", not target.get("restricted", False)))
+    share = bool(payload.get("consent_to_share", True))
     rid = f"R{store.next_seq('referral'):05d}"
     ref = {
         "id": rid, "case_id": target_id, "case_ref": target["ref"], "type": partner["type"], "partner_id": partner["id"],
@@ -797,6 +827,10 @@ def dispatch(store, case_id, officer, payload):
         "unit": unit, "status": "dispatched", "dispatched_at": now(), "dispatched_by": officer, "arrived_at": None, "cleared_at": None,
         "acknowledged_at": None, "instruction": clean(payload.get("note"), 200),
     }
+    case0 = store.get("cases", case_id)
+    if case0 and case0["kind"] in ("gbv", "sos"):
+        asked = [k for k in (payload.get("needs") if isinstance(payload.get("needs"), list) else case0.get("needs", [])) if k in taxonomy.GBV_NEEDS]
+        dep["needs"] = {k: {"status": "asked", "note": "", "at": None, "request_id": "", "request_partner": ""} for k in asked}
 
     def fn(c):
         if c["status"] == "closed":
@@ -808,6 +842,8 @@ def dispatch(store, case_id, officer, payload):
         c["first_action_at"] = c.get("first_action_at") or now()
         note = clean(payload.get("note"), 200)
         event(c, officer, f"{unit} dispatched from {dep['station_name']}." + (" " + note if note else ""), "deployment")
+        if dep.get("needs"):
+            event(c, officer, "The station was asked to have ready: " + ", ".join(taxonomy.GBV_NEEDS[k] for k in dep["needs"]) + ".", "deployment")
 
     case = store.patch("cases", case_id, fn)
     if case is None:
@@ -1011,6 +1047,8 @@ def case_detail(store, case_id, officer, role="desk"):
         "safe_now": case.get("safe_now"), "wants": case.get("wants"), "know_person": case.get("know_person"),
         "contact_pref": case.get("contact_pref"), "friend": case.get("friend"),
         "gender": case.get("gender", "undisclosed"), "age_band": case.get("age_band", "undisclosed"), "language": case.get("language", "en"),
+        "registered": case.get("registered", False), "home_address": case.get("home_address", ""), "friend_name": case.get("friend_name", ""),
+        "needs": case.get("needs", []), "needs_labels": {k: taxonomy.GBV_NEEDS[k] for k in taxonomy.GBV_NEEDS},
         "deployments": case.get("deployments", []),
         "suggested_station": geo.nearest_station(case["lat"], case["lon"]) if case["lat"] is not None else None,
         "referral_list": [store.get("referrals", rid) for rid in case["referrals"]],
@@ -1062,6 +1100,23 @@ def attention(store, cases, tips, refs):
         elif r.get("origin") != "board" and r["urgency"] == "urgent" and r["status"] == "sent" and r.get("sla_due_at") and t > r["sla_due_at"]:
             items.append({"type": "referral_unacknowledged", "severity": 2, "id": r["case_id"], "ref": r["case_ref"], "kind": "referral", "label": r["partner_name"],
                           "cluster_name": "", "since": r["sla_due_at"], "reason": "Urgent referral not acknowledged in time."})
+    for c in cases:
+        if c["status"] == "closed" or c["kind"] not in ("gbv", "sos"):
+            continue
+        for d in c.get("deployments", []):
+            if d["status"] == "cleared":
+                continue
+            for need, v in d.get("needs", {}).items():
+                label = taxonomy.GBV_NEEDS[need]
+                if v["status"] == "unavailable":
+                    req = next((r for r in refs if r["id"] == v.get("request_id")), None)
+                    if req and req["status"] != "completed":
+                        items.append({"type": "gbv_gap", "severity": 1, "id": c["id"], "ref": c["ref"], "kind": "gbv", "label": f"GBV: {label}",
+                                      "cluster_name": geo.name(c["cluster"]), "since": v.get("at") or d["dispatched_at"],
+                                      "reason": f"{d['station_name']} cannot supply it. Requested from {v.get('request_partner')} ({req['status']})."})
+                elif v["status"] == "asked" and t - d["dispatched_at"] > 600:
+                    items.append({"type": "gbv_unconfirmed", "severity": 1, "id": c["id"], "ref": c["ref"], "kind": "gbv", "label": f"GBV: {label}",
+                                  "cluster_name": geo.name(c["cluster"]), "since": d["dispatched_at"], "reason": f"{d['station_name']} has not said whether it has this ready."})
     items.sort(key=lambda i: (i["severity"], i["since"]))
     return items[:40]
 
@@ -1195,11 +1250,17 @@ def unit_tasks(store, ap_id):
                         "address": c["address"], "lat": c["lat"], "lon": c["lon"], "since": d["dispatched_at"], "status": d["status"], "unit": d["unit"],
                         "instruction": d.get("instruction", ""), "detail": c["note"], "priority": c["priority"],
                         "name": c["name"] if show_person else "", "mobile": c["mobile"] if show_person else "", "closed": c["status"] == "closed",
+                        "registered": c.get("registered", False), "home_address": c.get("home_address", "") if show_person else "",
+                        "folder": _folder(c),
+                        "needs": [{"key": k, "label": taxonomy.GBV_NEEDS[k], "status": v["status"], "note": v.get("note", ""), "request_partner": v.get("request_partner", "")} for k, v in d.get("needs", {}).items()],
                     })
     else:
         for item in partner_view(store, ap_id):
             raw = store.get("referrals", item["id"]) or {}
+            rcase = store.get("cases", raw.get("case_id", ""))
+            shares = bool(rcase)  # demo: the whole folder goes with the file to every action point
             tasks.append({
+                "folder": _folder(rcase) if shares else None,
                 "kind": "referral", "id": item["id"], "case_id": raw.get("case_id", ""), "case_ref": item["case_ref"], "label": item["label"], "cluster": item["cluster"],
                 "address": item["address"], "lat": item["lat"], "lon": item["lon"], "since": item["created_at"], "status": item["status"], "unit": "",
                 "instruction": item.get("instruction") or item["note"], "detail": item.get("detail", ""), "priority": "high" if item["urgency"] == "urgent" else "normal",
@@ -1281,5 +1342,157 @@ def end_shift(store, shift_id, photo):
     return sh
 
 
-def list_shifts(store):
-    return sorted(store.all("shifts"), key=lambda x: -x["in_at"])[:100]
+def list_shifts(store, q="", section="", since="", page=1, limit=25):
+    """Search and page the staff sign-in records on the server, so thousands of rows never reach the browser at once."""
+    rows = sorted(store.all("shifts"), key=lambda x: -x["in_at"])
+    counts = {"all": len(rows)}
+    for r in rows:
+        counts[r["section"]] = counts.get(r["section"], 0) + 1
+    if section and section != "all":
+        rows = [r for r in rows if r["section"] == section]
+    if since in ("today", "7d", "30d"):
+        cutoff = now() - {"today": 86400, "7d": 7 * 86400, "30d": 30 * 86400}[since]
+        rows = [r for r in rows if r["in_at"] >= cutoff]
+    q = clean(q, 60).lower()
+    if q:
+        def hay(r):
+            when = datetime.fromtimestamp(r["in_at"], timezone.utc).strftime("%Y-%m-%d %d %b %B %A").lower()
+            flags = " no photo" if (r.get("in_photo_missing") or r.get("out_photo_missing")) else ""
+            flags += " on shift" if not r["out_at"] else ""
+            return f"{r['officer_id']} {r['section_label']} {when}{flags}".lower()
+        rows = [r for r in rows if q == r["id"].lower() or all(tok in hay(r) for tok in q.split())]
+    limit = max(5, min(int(limit or 25), 100))
+    pages = max(1, -(-len(rows) // limit))
+    page = max(1, min(int(page or 1), pages))
+    return {"shifts": rows[(page - 1) * limit: page * limit], "total": len(rows), "page": page, "pages": pages, "counts": counts}
+
+
+# ----------------------------------------------------------------------------- call record (the file an officer or HQ can open and keep)
+def citizen_recording_chunk(store, case_id, ctoken, chunk):
+    """The caller's own phone records the call and sends it in pieces. Saved onto the file automatically."""
+    case = store.get("cases", case_id)
+    if not _ctoken_ok(case, ctoken):
+        raise Invalid("Call not found.")
+    size = add_recording_chunk(store, case_id, "Caller's phone", chunk, source="caller")
+    store.patch("cases", case_id, lambda c: c["call"].update(recording=True))
+    return size
+
+
+def call_record_text(store, case_id, officer):
+    """A plain-text file of the call: who, when, how long, the whole chat or captions, and what was saved with it."""
+    case = store.get("cases", case_id)
+    if case is None or not case.get("call"):
+        return None
+    call = case["call"]
+    fmt = lambda ts: datetime.fromtimestamp(ts, timezone.utc).astimezone(timezone(timedelta(hours=2))).strftime("%Y-%m-%d %H:%M:%S") if ts else "n/a"
+    secs = call.get("duration")
+    if secs is None and call.get("answered_at") and call.get("ended_at"):
+        secs = int(call["ended_at"] - call["answered_at"])
+    lines = [
+        "SAPS KZN DEMO. CALL RECORD (synthetic demonstration data; not a real police record)",
+        "=" * 72,
+        f"Reference : {case['ref']}",
+        f"Type      : {'Video call' if call.get('mode') == 'video' else 'Voice call'}",
+        f"Started   : {fmt(call.get('started_at'))}",
+        f"Answered  : {fmt(call.get('answered_at'))} by {call.get('operator') or 'n/a'}",
+        f"Ended     : {fmt(call.get('ended_at'))}",
+        f"Duration  : {f'{secs // 60}:{secs % 60:02d}' if secs is not None else 'n/a'}",
+        f"Channel   : {call.get('transport', 'text')}",
+        f"Recording : {'saved on the file' if any(m['type'] == 'recording' for m in case['media']) else 'none'}",
+        "-" * 72,
+        "CHAT AND CAPTIONS",
+    ]
+    if not case["transcript"]:
+        lines.append("(nothing was said or typed)")
+    for l in case["transcript"]:
+        who = "Caller" if l["who"] == "citizen" else "Officer"
+        kind = "caption" if l.get("src") == "caption" else "typed"
+        lines.append(f"[{fmt(l['at'])[11:]}] {who} ({kind}): {l['text']}")
+    lines += ["-" * 72, "FILE TIMELINE"]
+    for e in case["timeline"]:
+        lines.append(f"[{fmt(e['at'])}] {e['actor']}: {e['text']}")
+    audit(store, officer, "desk", "call.record.download", case_id)
+    return "\n".join(lines) + "\n"
+
+
+# ----------------------------------------------------------------------------- the folder that goes with a file
+def _folder(case):
+    """Call record, recording and evidence. Never the profile photo."""
+    call = case.get("call")
+    out = {"call": None, "evidence": []}
+    if call:
+        out["call"] = {
+            "mode": call.get("mode"), "state": call.get("state"), "operator": call.get("operator", ""), "duration": call.get("duration"),
+            "started_at": call.get("started_at"), "answered_at": call.get("answered_at"),
+            "lines": [{"at": l["at"], "who": l["who"], "text": l["text"], "src": l.get("src", "typed")} for l in case["transcript"]],
+        }
+    for m in case.get("media", []):
+        if m["type"] in ("recording", "video", "audio", "photo"):
+            out["evidence"].append({"id": m["id"], "type": m["type"], "size": m.get("size"), "source": m.get("source", "")})
+    return out if (out["call"] or out["evidence"]) else None
+
+
+def unit_media(store, ap_id, media_id):
+    """A station, unit or partner may open a file's media only if that file is on its page."""
+    data = unit_tasks(store, ap_id)
+    if data is None:
+        return None
+    meta = store.get("media", media_id)
+    if meta is None:
+        return None
+    allowed = {t["case_id"] for t in data["tasks"] if t.get("folder")}
+    if meta["case_id"] not in allowed or meta["type"] == "face":
+        return None
+    audit(store, data["point"]["name"], "unit", "folder.media.view", meta["case_id"], meta["type"])
+    if "data_url" in meta:
+        return ("image", meta["data_url"])
+    return ("blob", (meta["mime"], blobs.get(meta["key"], meta["storage"])))
+
+
+# ----------------------------------------------------------------------------- GBV: the station says what it has
+def _fallback_partner(store, need, cluster):
+    target = taxonomy.GBV_FALLBACK.get(need)
+    if target == "cluster":
+        target = f"unit-cluster-{cluster}" if store.get("partners", f"unit-cluster-{cluster}") else "unit-detective"
+    return store.get("partners", target) or store.get("partners", "unit-detective")
+
+
+def unit_need_answer(store, ap_id, task_id, need, answer, note, actor):
+    ap = _find_point(store, ap_id)
+    if ap is None or ap["type"] != "station":
+        raise Invalid("Unknown action point.")
+    if need not in taxonomy.GBV_NEEDS or answer not in ("available", "unavailable"):
+        raise Invalid("Choose have it or do not have it.")
+    owner = None
+    for c in store.all("cases"):
+        if any(d["id"] == task_id and d["station"] == ap["station"] and need in d.get("needs", {}) for d in c.get("deployments", [])):
+            owner = c
+    if owner is None:
+        raise Invalid("Task not found.")
+    note = clean(note, 200)
+    partner = None
+    request_id = ""
+    if answer == "unavailable":
+        partner = _fallback_partner(store, need, owner["cluster"])
+        request_id = f"R{store.next_seq('referral'):05d}"
+        label = taxonomy.GBV_NEEDS[need]
+        instruction = f"{ap['name']} does not have: {label}. Please supply it, or arrange it, for {owner['ref']}."
+        store.put("referrals", {
+            "id": request_id, "case_id": owner["id"], "case_ref": owner["ref"], "type": partner["type"], "partner_id": partner["id"],
+            "partner_name": partner["name"], "status": "sent", "urgency": "urgent", "consent_to_share": True, "note": instruction, "origin": "request",
+            "instruction": instruction, "created_by": ap["name"], "created_at": now(), "updated_at": now(), "due_at": now() + 30 * 60, "sla_due_at": now() + 30 * 60, "synthetic": False,
+        })
+
+    def fn(c):
+        for d in c["deployments"]:
+            if d["id"] == task_id:
+                d["needs"][need].update({"status": answer, "note": note, "at": now(), "request_id": request_id, "request_partner": partner["name"] if partner else ""})
+        if request_id:
+            c.setdefault("referrals", []).append(request_id)
+            event(c, ap["name"], f"Cannot supply: {taxonomy.GBV_NEEDS[need]}. Requested from {partner['name']}." + (" " + note if note else ""), "gbv")
+        else:
+            event(c, ap["name"], f"Has ready: {taxonomy.GBV_NEEDS[need]}." + (" " + note if note else ""), "gbv")
+
+    store.patch("cases", owner["id"], fn)
+    audit(store, ap["name"], "unit", "gbv.need." + answer, owner["id"], need)
+    return True

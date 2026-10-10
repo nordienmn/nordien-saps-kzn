@@ -62,7 +62,7 @@
   // ------------------------------------------------------------------ needs HQ action (slim bar + dropdown)
   const ATT_KIND = {
     verified_referral: ["Verified referral", "escalate"], tip_waiting: ["Tip waiting", "eye-off"], unanswered_call: ["Call unanswered", "phone"],
-    past_limit: ["Past time limit", "clock"], direction_overdue: ["Direction overdue", "alert"], referral_unacknowledged: ["Referral not acknowledged", "referral"],
+    gbv_gap: ["GBV: cannot supply", "alert"], gbv_unconfirmed: ["GBV: not confirmed", "clock"], past_limit: ["Past time limit", "clock"], direction_overdue: ["Direction overdue", "alert"], referral_unacknowledged: ["Referral not acknowledged", "referral"],
   };
   function openPanel(on) {
     const panel = $("esc-panel"), tog = $("esc-toggle");
@@ -325,6 +325,10 @@
       h("div.panel-grid.panel-grid--2",
         card("Deployments by station, last 7 days", h("span.chip.chip--neutral", { text: "Average time to arrive shown at the right" }),
           bars(ins.deployments_by_station.slice(0, 12).map((s) => ({ label: s.station + " (" + s.cluster + ")", value: s.dispatched, text: s.dispatched + " · " + dur(s.avg_arrival_s) })))),
+        card("GBV readiness: what stations could not supply", h("span.chip.chip--danger", { text: "National priority" }),
+          ins.gbv_needs && ins.gbv_needs.length ? bars(ins.gbv_needs.map((g) => ({ label: g.label, value: typeof g.unavailable === "number" ? g.unavailable : 0, text: g.available + " ready · " + g.unavailable + " short", cls: "bars__fill--alert" })))
+            : h("p.muted", { text: "No GBV file has been sent to a station yet." }),
+          h("p.muted.text-sm", { style: "margin-top:var(--space-3)", text: "Each time a station says it does not have something, the request goes out automatically and appears in Needs HQ action until it is dealt with." })),
         card("Demand against deployment, last 7 days", h("span.chip.chip--neutral", { text: "Where is cover thin?" }),
           bars(ins.demand_vs_deployment.filter((c) => c.incidents).sort((a, b) => b.per_deployment - a.per_deployment).map((c) => ({ label: c.name, value: c.per_deployment, text: c.incidents + " in · " + c.deployments + " out", cls: c.per_deployment > 3 ? "bars__fill--alert" : "" }))),
           h("p.muted.text-sm", { style: "margin-top:var(--space-3)", text: "Bar length is incidents per deployment. A long bar means few units were sent for the number of reports." })))));
@@ -392,34 +396,54 @@
     const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
     return same(d, t) ? "Today" : same(d, y) ? "Yesterday" : d.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" });
   }
+  const SH = { q: "", since: "", page: 1, timer: null };
   async function shifts(p) {
-    p.appendChild(h("div#shift-root.stack.stack--4", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading the sign-in records" }))));
-    let list;
-    try { list = (await api("/api/staff/shifts")).shifts; } catch (e) { clear($("shift-root")).append(h("p.error-line", { text: e.message })); return; }
-    const root = $("shift-root"); if (!root) return;
-    clear(root);
-    const inFolder = (x) => S.folder === "all" || x.section === S.folder;
-    const shown = list.filter(inFolder);
-    root.appendChild(h("div.banner.banner--restricted", icon("lock"), h("span", { text: "Every officer gives a name or number and a live camera photo when they sign in and again when they sign out. Opening a photo is written to the access log." })));
-    root.appendChild(h("div.pipeline", ...[["all", "All sections", "file"], ...SECTION_FOLDERS.map((f) => [f[0], f[1], f[2]])].map(([key, label, ico]) => {
-      const mine = list.filter((x) => key === "all" || x.section === key);
-      const on = mine.filter((x) => !x.out_at).length;
-      return h("button.stage" + (S.folder === key ? ".stage--alert" : ""), { type: "button", "aria-pressed": String(S.folder === key), style: "text-align:left;cursor:pointer;font:inherit;color:inherit",
-        onclick: () => { S.folder = key; renderPanel(); } },
-        h("span.chip-row", icon("building"), h("span", { text: label })), h("b", { text: String(mine.length) }), h("span", { text: on + " on shift now" }));
-    })));
-    const groups = {};
-    shown.forEach((x) => { (groups[dayLabel(x.in_at)] = groups[dayLabel(x.in_at)] || []).push(x); });
-    if (!shown.length) { root.appendChild(h("div.state", h("span.state__icon", icon("inbox", "icon--lg")), h("p.state__title", { text: "No sign-ins in this folder yet" }))); return; }
-    Object.entries(groups).forEach(([day, rows]) => {
-      root.appendChild(card((S.folder === "all" ? "All sections" : (SECTION_FOLDERS.find((f) => f[0] === S.folder) || [0, ""])[1]) + " · " + day, h("span.chip.chip--neutral", { text: rows.length + " sign-in" + (rows.length === 1 ? "" : "s") }),
-        h("div.table-wrap", h("table.matrix", h("thead", h("tr", ...["Officer", "Section", "Signed in", "Signed out", "Time on shift", "Photos"].map((x) => h("th", { scope: "col", text: x })))),
-          h("tbody", ...rows.map((x) => h("tr", h("th", { scope: "row", text: x.officer_id }), h("td", { text: x.section_label }),
-            h("td", { text: hhmm(x.in_at) }), h("td", { text: x.out_at ? hhmm(x.out_at) : "On shift now" }),
-            h("td", { text: x.out_at ? dur(x.out_at - x.in_at) : dur(nowS() - x.in_at) }),
-            h("td", x.has_in_photo || x.has_out_photo ? h("button.btn.btn--secondary", { type: "button", onclick: () => showShiftPhotos(x) }, icon("camera"), "View photos")
-              : h("span.muted", { text: x.synthetic ? "none (demo data)" : "" }), x.in_photo_missing ? h("span.chip.chip--warning", { text: "In: no photo" }) : null, x.out_photo_missing ? h("span.chip.chip--warning", { text: "Out: no photo" }) : null))))))));
-    });
+    p.appendChild(h("div.stack.stack--3",
+      h("div.banner.banner--restricted", icon("lock"), h("span", { text: "Staff log-in records. Each row is a link: open it to see the times and the sign-in and sign-out photos. Opening a photo is written to the access log." })),
+      h("div.pipeline#shift-folders"),
+      h("div.filter-bar",
+        h("div.filter-bar__group", { style: "flex:1 1 20rem" }, h("label.filter-bar__label", { for: "shift-q", text: "Search" }),
+          h("input.input#shift-q", { type: "search", placeholder: "Name or number, section, date (for example 10 Oct), or 'no photo'", autocomplete: "off", value: SH.q, style: "width:100%" })),
+        h("div.filter-bar__group", h("label.filter-bar__label", { for: "shift-since", text: "Period" }),
+          h("select.select.select--compact#shift-since", ...[["", "All time"], ["today", "Today"], ["7d", "Last 7 days"], ["30d", "Last 30 days"]].map(([v, l]) => h("option", { value: v, selected: v === SH.since ? true : null, text: l }))))),
+      h("div#shift-list", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading" })))));
+    $("shift-q").addEventListener("input", (e) => { clearTimeout(SH.timer); SH.timer = setTimeout(() => { SH.q = e.target.value; SH.page = 1; loadShifts(); }, 280); });
+    $("shift-since").addEventListener("change", (e) => { SH.since = e.target.value; SH.page = 1; loadShifts(); });
+    loadShifts();
+  }
+
+  async function loadShifts() {
+    const box = $("shift-list"); if (!box) return;
+    const qs = new URLSearchParams({ q: SH.q, section: S.folder === "all" ? "" : S.folder, since: SH.since, page: String(SH.page), limit: "25" });
+    let r;
+    try { r = await api("/api/staff/shifts?" + qs.toString()); } catch (e) { clear(box).append(h("p.error-line", { text: e.message })); return; }
+    if (!$("shift-list")) return;
+    // folders: one per section, with counts that ignore the search so you can see where records are
+    const f = $("shift-folders");
+    if (f) {
+      clear(f);
+      [["all", "All sections", "file"], ...SECTION_FOLDERS].forEach(([key, label]) => {
+        f.appendChild(h("button.stage" + (S.folder === key ? ".stage--alert" : ""), { type: "button", "aria-pressed": String(S.folder === key), style: "text-align:left;cursor:pointer;font:inherit;color:inherit",
+          onclick: () => { S.folder = key; SH.page = 1; loadShifts(); } },
+          h("span.chip-row", icon("building"), h("span", { text: label })), h("b", { text: String(r.counts[key] || 0) }), h("span", { text: "records" })));
+      });
+    }
+    clear(box);
+    box.appendChild(h("p.muted.text-sm", { text: r.total + " record" + (r.total === 1 ? "" : "s") + (SH.q ? " matching “" + SH.q + "”" : "") + ". Page " + r.page + " of " + r.pages + "." }));
+    if (!r.shifts.length) { box.appendChild(h("div.state", h("span.state__icon", icon("search", "icon--lg")), h("p.state__title", { text: "No records found" }), h("p.state__text", { text: "Try a different name, number or date." }))); return; }
+    box.appendChild(h("ul.link-list", ...r.shifts.map((x) => h("li",
+      h("button.link-row", { type: "button", onclick: () => showShiftPhotos(x) },
+        h("span.link-row__who", icon("user", "icon--sm"), h("b", { text: x.officer_id })),
+        h("span.chip.chip--neutral", { text: x.section_label }),
+        h("span.link-row__when", { text: fmtTime(x.in_at) + " to " + (x.out_at ? hhmm(x.out_at) : "on shift") }),
+        x.in_photo_missing || x.out_photo_missing ? h("span.chip.chip--warning", { text: "no photo" }) : null,
+        h("span.link-row__open", { text: "Open" }), icon("chevron-right", "icon--sm"))))));
+    if (r.pages > 1) {
+      box.appendChild(h("div.chip-row", { style: "justify-content:space-between;margin-top:var(--space-3)" },
+        h("button.btn.btn--secondary", { type: "button", disabled: r.page <= 1 ? true : null, onclick: () => { SH.page = r.page - 1; loadShifts(); } }, icon("chevron-left"), "Previous"),
+        h("span.muted.text-sm", { text: "Page " + r.page + " of " + r.pages }),
+        h("button.btn.btn--secondary", { type: "button", disabled: r.page >= r.pages ? true : null, onclick: () => { SH.page = r.page + 1; loadShifts(); } }, "Next", icon("chevron-right"))));
+    }
   }
   async function showShiftPhotos(x) {
     try {

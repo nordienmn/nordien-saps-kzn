@@ -24,7 +24,7 @@ def guard():
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         if not security.same_origin_ok():
             return jsonify({"error": "Blocked: request came from another site."}), 403
-        if request.endpoint in ("api.citizen_upload", "api.call_recording"):
+        if request.endpoint in ("api.citizen_upload", "api.call_recording", "api.caller_recording"):
             return None  # raw file bytes, checked inside the route
         if not request.is_json:
             return jsonify({"error": "Send JSON."}), 415
@@ -66,7 +66,7 @@ def citizen_report():
     channel = "weather" if kind == "sos" or data.get("via") == "weather" else "app"
     case = service.create_case(s, data, channel=channel)
     notified = False
-    if case.get("friend") and channel == "weather":
+    if case.get("friend") and case["kind"] in ("gbv", "sos"):
         notified = _alert_friend(case)
     return jsonify({"ok": True, "ref": case["ref"], "id": case["id"], "kind": case["kind"], "located": case["lat"] is not None, "friend_notified": notified})
 
@@ -115,6 +115,15 @@ def call_line(cid):
 def call_end(cid):
     service.citizen_end_call(store(), cid, body().get("t"))
     return jsonify({"ok": True})
+
+
+@bp.post("/c/call/<cid>/recording")
+def caller_recording(cid):
+    chunk = request.get_data(cache=False)
+    if not chunk or len(chunk) > 4 * 1024 * 1024:
+        return jsonify({"error": "Bad chunk."}), 413
+    size = service.citizen_recording_chunk(store(), cid, request.args.get("t", ""), chunk)
+    return jsonify({"ok": True, "size": size})
 
 
 @bp.post("/c/call/<cid>/token")
@@ -194,6 +203,37 @@ def unit_tasks(ap_id):
     if data is None:
         return jsonify({"error": "Not found."}), 404
     return jsonify(data)
+
+
+@bp.get("/unit/<ap_id>/media/<mid>")
+def unit_media(ap_id, mid):
+    if not _unit_access(ap_id):
+        return jsonify({"error": "This link is not valid.", "code": "auth"}), 403
+    found = service.unit_media(store(), ap_id, mid)
+    if found is None:
+        return jsonify({"error": "Not found."}), 404
+    kind, payload = found
+    if kind == "image":
+        return jsonify({"data_url": payload})
+    mime, data = payload
+    return send_file(io.BytesIO(data), mimetype=mime, conditional=True, max_age=0)
+
+
+@bp.post("/unit/<ap_id>/need")
+def unit_need(ap_id):
+    if not _unit_access(ap_id):
+        return jsonify({"error": "This link is not valid.", "code": "auth"}), 403
+    d = body()
+    data = service.unit_tasks(store(), ap_id)
+    name = data["point"]["name"] if data else ap_id
+    service.unit_need_answer(store(), ap_id, str(d.get("task_id") or ""), d.get("need"), d.get("answer"), d.get("note", ""), name)
+    return jsonify({"ok": True})
+
+
+@bp.get("/staff/gbv-needs")
+@security.login_required("desk", "board")
+def gbv_needs():
+    return jsonify({"needs": taxonomy.GBV_NEEDS})
 
 
 @bp.post("/unit/<ap_id>/task")
@@ -412,6 +452,18 @@ def staff_deployment(cid, did):
     return jsonify({"ok": True})
 
 
+@bp.get("/staff/case/<cid>/record.txt")
+@security.login_required("desk")
+def call_record_file(cid):
+    if (g := _case_gate(cid)):
+        return g
+    _, officer = security.current()
+    text = service.call_record_text(store(), cid, officer)
+    if text is None:
+        return jsonify({"error": "That file has no call."}), 404
+    return Response(text, mimetype="text/plain; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="call-record-{cid}.txt"'})
+
+
 @bp.post("/staff/case/<cid>/refer")
 @security.login_required("desk")
 def staff_refer(cid):
@@ -533,7 +585,8 @@ def staff_direct():
 @bp.get("/staff/shifts")
 @security.login_required("board")
 def staff_shifts():
-    return jsonify({"shifts": service.list_shifts(store())})
+    a = request.args
+    return jsonify(service.list_shifts(store(), a.get("q", ""), a.get("section", ""), a.get("since", ""), a.get("page", 1, type=int), a.get("limit", 25, type=int)))
 
 
 @bp.get("/staff/shift-photo/<sid>/<which>")

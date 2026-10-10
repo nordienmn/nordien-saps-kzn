@@ -285,3 +285,23 @@ body .feed__list { max-height: 17rem; }
 .dock__quick { grid-auto-flow: column; grid-auto-columns: minmax(9.5rem, 1fr); grid-template-columns: none; overflow-x: auto; padding-bottom: 2px; }
 .dock__quick .dropbox { min-height: 3.1rem; }
 .dock__sub { display: grid; gap: var(--space-1); }
+
+
+/* ---- long record lists: one line per record, each a link ---- */
+.link-list { list-style: none; display: grid; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-surface); }
+.link-list li + li { border-top: 1px solid var(--color-border); }
+.link-row { width: 100%; display: grid; grid-template-columns: minmax(8rem, 1.2fr) auto minmax(10rem, 1.6fr) auto auto auto; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-4); min-height: 2.9rem; text-align: left; font: inherit; color: var(--color-text); background: none; border: 0; cursor: pointer; }
+.link-row:hover { background: var(--color-sunken); }
+.link-row:focus-visible { outline: var(--focus-width) solid var(--color-focus); outline-offset: -2px; }
+.link-row__who { display: inline-flex; gap: var(--space-2); align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row__when { font-size: var(--fs-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.link-row__open { font-size: var(--fs-sm); color: var(--color-link); font-weight: var(--fw-semibold); }
+@media (max-width: 800px) { .link-row { grid-template-columns: 1fr auto; } .link-row__when { grid-column: 1 / -1; } }
+
+/* print: just the open file, for the call record */
+@media print {
+  .chrome, .desk__queue, .actions-wrap, .dock, .incoming-wrap, #error-slot, .toast-region, .skip-link, .btn { display: none !important; }
+  .desk { display: block; } .desk__main { padding: 0; }
+  body, .canvas { background: #fff !important; color: #000 !important; }
+  .card { border: 1px solid #999; box-shadow: none; background: #fff; color: #000; }
+}

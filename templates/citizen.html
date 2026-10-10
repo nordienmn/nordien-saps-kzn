@@ -302,6 +302,15 @@
         <div class="field"><label class="field__label" for="p-name" data-i18n="pName">Name</label><input class="input" id="p-name" maxlength="80" autocomplete="name"></div>
         <div class="field"><label class="field__label" for="p-mobile" data-i18n="pMobile">Mobile number</label><input class="input" id="p-mobile" type="tel" inputmode="tel" maxlength="20" autocomplete="tel"></div>
         <div class="field"><label class="field__label" for="p-addr" data-i18n="pAddr">Address or area</label><input class="input" id="p-addr" maxlength="120" autocomplete="street-address"></div>
+        <div class="field"><label class="field__label" for="p-gender"><span data-i18n="pGender">Gender</span> (<span data-i18n="optional">optional</span>)</label>
+          <select class="select" id="p-gender"><option value="undisclosed" data-i18n="gU">Prefer not to say</option><option value="female" data-i18n="gF">Female</option><option value="male" data-i18n="gM">Male</option><option value="other" data-i18n="gO">Other</option></select></div>
+        <div class="field"><label class="field__label" for="p-age"><span data-i18n="pAge">Age group</span> (<span data-i18n="optional">optional</span>)</label>
+          <select class="select" id="p-age"><option value="undisclosed" data-i18n="gU">Prefer not to say</option><option value="under_18">Under 18</option><option value="18_24">18-24</option><option value="25_34">25-34</option><option value="35_49">35-49</option><option value="50_64">50-64</option><option value="65_plus">65+</option></select></div>
+        <fieldset class="choice-group"><legend data-i18n="pTrusted">Trusted person (optional)</legend>
+          <p class="field__hint" data-i18n="pTrustedHint">Told when you ask for help from the GBV form or the weather screen.</p>
+          <div class="field"><label class="field__label" for="p-fname" data-i18n="pFName">Their name</label><input class="input" id="p-fname" maxlength="60" autocomplete="off"></div>
+          <div class="field"><label class="field__label" for="p-fmob" data-i18n="pFMobile">Their mobile number</label><input class="input" id="p-fmob" type="tel" inputmode="tel" maxlength="20" autocomplete="off"></div>
+        </fieldset>
         <p class="error-line" id="p-error" role="alert" hidden></p>
         <div class="stack stack--3">
           <button type="submit" class="btn btn--primary btn--lg btn--block" data-i18n="pSave">Save profile</button>
@@ -324,6 +333,10 @@
           <button type="button" class="btn btn--secondary" id="d-copy">{{ icon('copy') }}<span data-i18n="aCopy">Copy code</span></button>
         </div>
         <p class="muted text-sm" id="d-keep" data-i18n="doneKeep">Keep this number. Quote it if you contact us.</p>
+      </div>
+      <div class="card card--flat" id="d-friend-box" hidden style="width:100%;text-align:left">
+        <p class="label-caps" id="d-friend-t"></p>
+        <span class="chip-row" style="margin-top:var(--space-2)"><a class="btn btn--primary" id="d-friend-wa" target="_blank" rel="noopener"></a><a class="btn btn--secondary" id="d-friend-sms"></a></span>
       </div>
       <div class="card card--flat done__next">
         <h2 class="label-caps" data-i18n="doneNextT">What happens next</h2>

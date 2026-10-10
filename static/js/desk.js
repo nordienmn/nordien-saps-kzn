@@ -11,6 +11,11 @@
     area: { label: "Infrastructure", icon: "lamp", pick: (c) => c.kind === "area" },
     anon: { label: "Tip-off line", icon: "eye-off", tips: true },
   };
+  const GBV_NEEDS = {
+    female_officer: "Female officer to attend", counsellor: "Counsellor or victim support", kit_d1: "Evidence kit for an adult (D1 rape kit)", kit_d7: "Evidence kit for a child under 13 (D7 rape kit)",
+    medical: "Medical examination and treatment (including PEP within 72 hours)", vfr: "Victim Friendly Room", transport: "Transport to a care centre", shelter: "A safe place to stay", protection_order: "Help with a protection order",
+  };
+  const isGbv = (k) => k === "gbv" || k === "sos";
   const PRIO_NUM = { critical: 1, high: 2, normal: 3, low: 4 };
   const PRIO_WORD = { critical: "Critical", high: "High", normal: "Medium", low: "Routine" };
   const STATUS_WORD = { new: "New", assigned: "Accepted", in_progress: "In progress", referred: "Referred", closed: "Closed", verified: "Verified", acknowledged: "With HQ", directed: "Directed" };
@@ -391,10 +396,18 @@
     }
     left.appendChild(locationCard(d));
     if (!tip) left.appendChild(deploymentsCard(d));
-    right.appendChild(timelineCard(d));
-    right.appendChild(contentCard(d, tip));
-    if (tip) right.appendChild(tipFlowCard(d)); else right.appendChild(referralsCard(d));
-    if (d.media && d.media.length) right.appendChild(mediaCard(d));
+    if (isGbv(d.kind)) right.appendChild(gbvCard(d));
+    if (d.call) {
+      right.appendChild(contentCard(d, tip));
+      if (d.media && d.media.length) right.appendChild(mediaCard(d));
+      right.appendChild(timelineCard(d));
+      right.appendChild(referralsCard(d));
+    } else {
+      right.appendChild(timelineCard(d));
+      right.appendChild(contentCard(d, tip));
+      if (tip) right.appendChild(tipFlowCard(d)); else right.appendChild(referralsCard(d));
+      if (d.media && d.media.length) right.appendChild(mediaCard(d));
+    }
     grid.append(left, right); root.appendChild(grid);
     drawMap(d);
     if (quiet) window.scrollTo(0, keepY);
@@ -431,15 +444,37 @@
     return out;
   }
 
+  // GBV is a national priority: the file shows what the response needs and what each station has confirmed.
+  function gbvCard(d) {
+    const c = card("GBV response", h("span.chip.chip--danger", { text: "National priority" }));
+    const picked = new Set(d.needs || []);
+    const boxes = Object.entries(GBV_NEEDS).map(([k, label]) => h("label.choice", h("input", { type: "checkbox", value: k, checked: picked.has(k) ? true : null }), h("span.choice__title", { text: label })));
+    c.append(h("p.muted.text-sm", { text: "Tick what this file needs. When you send it to a station, the station must say whether it has each one ready." }),
+      h("div.choice-group", { id: "gbv-needs", style: "max-height:15rem;overflow:auto" }, ...boxes),
+      h("p", { style: "margin-top:var(--space-2)" }, h("button.btn.btn--secondary", { type: "button", onclick: () => { const keys = Array.from(document.querySelectorAll("#gbv-needs input:checked")).map((i) => i.value); doAct(d, "needs", { needs: keys }); } }, icon("check"), "Save needs")));
+    const deps = (d.deployments || []).filter((x) => x.needs && Object.keys(x.needs).length);
+    if (deps.length) {
+      c.append(h("p.label-caps", { style: "margin-top:var(--space-4)", text: "What each station has confirmed" }));
+      deps.forEach((x) => c.append(h("div", { style: "margin-top:var(--space-2)" }, h("b", { text: x.station_name }),
+        h("ul.mini-list", ...Object.entries(x.needs).map(([k, v]) => h("li", h("span", { text: GBV_NEEDS[k] || k }),
+          v.status === "available" ? h("span.chip.chip--closed", { text: "Has it ready" }) : v.status === "unavailable" ? h("span.chip.chip--danger", { text: "Not available. Requested from " + (v.request_partner || "another unit") }) : h("span.chip.chip--warning", { text: "Waiting for the station" })))))));
+    } else {
+      c.append(h("p.muted.text-sm", { style: "margin-top:var(--space-3)", text: "No station has been asked yet. Use Dispatch or drag the file onto a station or an FCS unit." }));
+    }
+    return c;
+  }
+
   function personCard(d) {
     const c = card("Person");
     const photo = (d.media || []).find((m) => m.type === "face");
     const av = h("div.avatar", { role: "img", "aria-label": "Profile photo" }, icon("user"));
     if (photo) api(`/api/staff/media/${photo.id}`).then((m) => { clear(av); av.appendChild(h("img", { src: m.data_url, alt: "" })); }).catch(() => {});
     c.append(
-      h("div.person", av, h("div", h("p.person__name", { text: d.name || "Not given" }), h("p.muted.text-sm", { text: d.name ? (photo ? "Profile photo taken on the citizen's phone" : "Name given on the report") : "No profile on this report" }))),
+      h("div.person", av, h("div", h("p.person__name", { text: d.name || "Not given" }),
+        h("p.muted.text-sm", d.registered ? h("span.chip.chip--info", { text: "Registered citizen" }) : null, " " + (d.name ? (photo ? "Profile photo taken on the citizen's phone" : "Name given on the report") : "No profile on this report")))),
       h("div", { style: "margin-top:var(--space-4)" }, kv([
-        ["Mobile", d.mobile || "Not given"], ["Address", d.address || "Not given"], ["Channel", d.channel + (d.language === "zu" ? " · isiZulu" : "")],
+        ["Mobile", d.mobile || "Not given"], d.home_address ? ["Home address", d.home_address] : null, ["Place of incident", d.address || "Not given"], ["Channel", d.channel + (d.language === "zu" ? " · isiZulu" : "")],
+        d.friend_name || d.friend ? ["Trusted person", (d.friend_name || "") + (d.friend ? " · " + d.friend : "")] : null,
         ["Gender", GENDER[d.gender] || "Not given"], ["Age group", AGE[d.age_band] || "Not given"],
         d.contact_pref ? ["May we contact?", { call: "Yes, call", sms: "Text only", none: "No" }[d.contact_pref]] : null,
       ].filter(Boolean))),
@@ -515,7 +550,12 @@
   function callCard(d) {
     const call = d.call || {};
     const c = card("Call", h("span.chip.chip--neutral", { text: call.transport === "video" ? "Live video" : "Text only in this demo" }));
-    c.append(h("div.remote-video#remote-video", { hidden: true }));
+    const hasRec = (d.media || []).some((m) => m.type === "recording");
+    c.append(h("p.muted.text-sm", { text: (call.mode === "video" ? "Video call" : "Voice call") + (call.operator ? " answered by " + call.operator : "") + (call.duration != null ? " · " + fmtClock(call.duration) : "") + " · Recording: " + (hasRec ? "saved on this file" : "none") }),
+      h("span.chip-row", { style: "margin-bottom:var(--space-3)" },
+        h("a.btn.btn--secondary", { href: `/api/staff/case/${d.id}/record.txt`, download: `call-record-${d.ref}.txt` }, icon("download"), "Download call record (.txt)"),
+        h("button.btn.btn--ghost", { type: "button", onclick: () => window.print() }, "Print")),
+      h("div.remote-video#remote-video", { hidden: true }));
     const ul = h("ul.transcript__list#tlist", { role: "log", "aria-live": "polite" });
     (d.transcript || []).forEach((l) => ul.appendChild(h("li.transcript__line" + (l.who === "citizen" ? ".transcript__line--you" : "") + (l.partial ? ".transcript__line--partial" : ""), h("span.transcript__who", { text: l.who === "citizen" ? "Caller" : "You (" + (call.operator || "OP") + ")" }), h("span.transcript__text", { text: l.text + (l.partial ? " …" : "") }))));
     if (!(d.transcript || []).length) ul.appendChild(h("li.transcript__empty", { text: call.state === "live" ? "Nothing said yet." : "Messages and captions appear here once the call is answered." }));
@@ -616,7 +656,8 @@
     }
     const byType = (f) => S.points.filter(f);
     // The most used targets stay in view; everything else folds away so the page stays short.
-    const quick = byType((ap) => ap.group === "SAPS units" && ap.type !== "saps_cluster");
+    const gbvQuick = ["fcs_unit", "gbv_tcc", "social_worker", "shelter", "health", "forensic_supply", "transport"];
+    const quick = isGbv(d.kind) ? byType((ap) => gbvQuick.includes(ap.type)) : byType((ap) => ap.group === "SAPS units" && ap.type !== "saps_cluster");
     wrap.appendChild(h("div.dock__quick", ...quick.map((ap) => box(ap, ap.cluster))));
     const sub = (title, list) => list.length ? h("div.dock__sub", h("p.label-caps", { text: title + " (" + list.length + ")" }), h("div.dock__boxes", ...list.map((ap) => box(ap)))) : null;
     wrap.appendChild(h("details.dock__group", { open: d.kind === "gbv" || d.kind === "sos" || d.kind === "area" ? true : null },
@@ -639,15 +680,16 @@
     }
     const d = { id: item.id, kind: item.kind, ref: item.ref, priority: item.priority, has_contact: item.has_contact, mobile: "", suggested_station: null };
     if (ap.type === "station") {
-      const v = await ask({ title: "Send " + item.ref + " to " + ap.name, body: "The station will see this task on its own page and acknowledge it. Demo: nobody is really dispatched.",
-        fields: [{ id: "unit", type: "select", label: "Unit asked for", value: item.kind === "gbv" ? "FCS unit" : "Patrol vehicle", options: ((await getStations()).units).map((u) => ({ value: u, label: u })) }, { id: "note", type: "text", label: "Instruction", hint: "One line for the officers." }], ok: "Send to the station" });
-      if (v) guarded(async () => { await call(`/api/staff/case/${item.id}/dispatch`, { station: ap.station, unit: v.unit, note: v.note }); toast("Sent to " + ap.name); });
+      const gbvF = isGbv(item.kind) ? Object.entries(GBV_NEEDS).map(([k, label]) => ({ id: "need_" + k, type: "checkbox", label, checked: ["female_officer", "counsellor"].includes(k) })) : [];
+      const v = await ask({ title: "Send " + item.ref + " to " + ap.name, body: "The station will see this task on its own page and acknowledge it." + ((item.call_mode || item.has_media) ? " The folder goes with it: call record, recording and any evidence." : "") + " Demo: nobody is really dispatched.",
+        fields: [{ id: "unit", type: "select", label: "Unit asked for", value: item.kind === "gbv" ? "FCS unit" : "Patrol vehicle", options: ((await getStations()).units).map((u) => ({ value: u, label: u })) }, { id: "note", type: "text", label: "Instruction", hint: "One line for the officers." }, ...gbvF], ok: "Send to the station" });
+      if (v && gbvF.length) v.needs = Object.keys(GBV_NEEDS).filter((k) => v["need_" + k]);
+      if (v) guarded(async () => { await call(`/api/staff/case/${item.id}/dispatch`, { station: ap.station, unit: v.unit, note: v.note, needs: v.needs }); toast("Sent to " + ap.name); });
       return;
     }
-    const v = await ask({ title: "Send " + item.ref + " to " + ap.name, body: "It appears on this action point's page. You stay the owner until they acknowledge. Demo: nothing is really sent.",
+    const v = await ask({ title: "Send " + item.ref + " to " + ap.name, body: "It appears on this action point's page. You stay the owner until they acknowledge." + ((item.call_mode || item.has_media) ? " The folder goes with it: call record, recording and any evidence." : "") + " Demo: nothing is really sent.",
       fields: [
         { id: "urgency", type: "select", label: "Urgency", value: item.priority === "critical" ? "urgent" : "routine", options: [{ value: "routine", label: "Routine" }, { value: "urgent", label: "Urgent (15 minute limit)" }] },
-        item.has_contact ? { id: "consent_to_share", type: "checkbox", label: "The citizen agreed to share their contact details", hint: "Leave unticked if they did not agree." } : null,
         { id: "note", type: "text", label: "Note" },
       ].filter(Boolean), ok: "Send" });
     if (v) guarded(async () => { await call(`/api/staff/case/${item.id}/refer`, Object.assign({ partner_id: ap.id }, v)); toast("Sent to " + ap.name); });
@@ -717,14 +759,17 @@
   async function dispatchDlg(d) {
     const st = await getStations();
     const near = d.suggested_station || "";
+    const gbvFields = isGbv(d.kind) ? Object.entries(GBV_NEEDS).map(([k, label]) => ({ id: "need_" + k, type: "checkbox", label, checked: (d.needs || []).includes(k) })) : [];
     const v = await ask({
-      title: "Send a station", body: "Choose the station and the kind of unit. The times you record here feed HQ's response figures. Demo: nobody is really dispatched.",
+      title: "Send a station", body: "Choose the station and the kind of unit. The call record, recording and any evidence go with the file. The times you record here feed HQ's response figures. Demo: nobody is really dispatched.",
       fields: [
         { id: "station", type: "select", label: "Station", value: near, options: st.stations.map((s) => ({ value: s.key, label: s.name + (s.key === near ? " (nearest)" : "") })) },
         { id: "unit", type: "select", label: "Unit", value: d.kind === "gbv" ? "FCS unit" : "Patrol vehicle", options: st.units.map((u) => ({ value: u, label: u })) },
+        ...(gbvFields.length ? [{ id: "needs_h", type: "text", label: "The station must say whether it has these ready", hint: "Tick what this file needs. If the station does not have one, the request goes out automatically and HQ sees it." }, ...gbvFields] : []),
       ], ok: "Dispatch",
     });
-    if (v) guarded(async () => { await call(`/api/staff/case/${d.id}/dispatch`, v); toast("Dispatched from " + (st.stations.find((s) => s.key === v.station) || {}).name); });
+    if (v && gbvFields.length) { v.needs = Object.keys(GBV_NEEDS).filter((k) => v["need_" + k]); }
+    if (v) guarded(async () => { await call(`/api/staff/case/${d.id}/dispatch`, { station: v.station, unit: v.unit, note: v.note, needs: v.needs }); toast("Dispatched from " + (st.stations.find((s) => s.key === v.station) || {}).name); });
   }
 
   async function referDlg(d) {

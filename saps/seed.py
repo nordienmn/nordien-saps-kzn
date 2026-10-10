@@ -163,6 +163,20 @@ def seed(store):
             service.create_referral(store, case["id"], "GBV desk", {"partner_id": "sw-dsd"}, synthetic=True)
             _finish(store, case, rng, age, "closed", "GBV desk")
 
+    # ---- GBV response in motion: one station has confirmed most things but cannot supply the evidence kit
+    gbv_cases = sorted([c for c in store.all("cases") if c["kind"] == "gbv" and c["status"] != "closed"], key=lambda c: c["created_at"])
+    if gbv_cases:
+        newest = gbv_cases[-1]
+        service.act(store, newest["id"], "GBV desk", {"action": "needs", "needs": ["female_officer", "counsellor", "kit_d1", "medical"]})
+        dep = service.dispatch(store, newest["id"], "GBV desk", {"station": "umlazi", "unit": "FCS unit", "note": "Adult survivor, sexual offence. Please prepare."})
+        service.unit_need_answer(store, "st-umlazi", dep["id"], "female_officer", "available", "On duty tonight", "Umlazi SAPS")
+        service.unit_need_answer(store, "st-umlazi", dep["id"], "counsellor", "available", "", "Umlazi SAPS")
+        service.unit_need_answer(store, "st-umlazi", dep["id"], "kit_d1", "unavailable", "Shelf is empty, expired kits removed", "Umlazi SAPS")
+    if len(gbv_cases) > 1:
+        other = gbv_cases[0]
+        dep2 = service.dispatch(store, other["id"], "GBV desk", {"station": "inanda", "unit": "FCS unit", "needs": ["female_officer", "counsellor"]})
+        service.unit_need_answer(store, "st-inanda", dep2["id"], "female_officer", "available", "", "Inanda SAPS")
+
     # ---- three finished calls, with transcripts
     call_rows = [
         ("durban_central", "voice", 1.5 * DAY, [("citizen", "I need help. There are men at my gate."), ("operator", "SAPS KZN control room. Stay inside. Where are you?"), ("citizen", "Berea Road, number fourteen."), ("operator", "A unit is being advised. Stay on the line.")]),

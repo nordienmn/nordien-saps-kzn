@@ -90,13 +90,24 @@ $("send").addEventListener("click", async function () {
   var wants = []; needs.forEach(function (w) { if (wants.indexOf(w) < 0) wants.push(w); });
   btn.disabled = true;
   var pos = await geo(4000);
+  var prof = null; try { prof = JSON.parse(localStorage.getItem("saps-profile") || "null"); } catch (e) { prof = null; }
+  var fnum = friend ? friend.m : (prof && prof.friend) || "", fname = friend ? friend.n : (prof && prof.friend_name) || "";
   var body = { kind: "gbv", via: "weather", safe_now: safe, contact_pref: reach, mobile: reach === "none" ? "" : mob, wants: wants,
     know_person: (document.querySelector("input[name=who]:checked") || {}).value === "yes" ? "yes" : (document.querySelector("input[name=who]:checked") || {}).value === "no" ? "no" : "skip",
-    friend: friend ? friend.m : "", lang: lang };
+    friend: fnum, friend_name: fname, lang: lang };
+  if (prof) { body.name = prof.name; body.home_address = prof.addr || ""; body.gender = prof.gender || "undisclosed"; body.age_band = prof.age_band || "undisclosed"; body.registered = true; if (prof.face) body.face = prof.face; if (reach === "none") body.mobile = prof.mobile || ""; else body.mobile = mob || prof.mobile || ""; }
   if (pos) { body.lat = pos.lat; body.lon = pos.lon; }
   try {
     var r = await SAPS.api("/api/c/report", { body: body });
     $("d-ref").textContent = r.ref; $("d-friend").hidden = !r.friend_notified;
+    var box = $("d-friend-links"); box.textContent = ""; box.hidden = true;
+    if (fnum) {
+      var digits = fnum.replace(/[^\d+]/g, "").replace(/^0/, "27").replace(/^\+/, ""), text = (lang === "zu" ? "Ngidinga usizo. Sicela ungishayele noma weze kimi." : "I need help. Please call me or come to me.") + (pos ? " https://www.openstreetmap.org/?mlat=" + pos.lat + "&mlon=" + pos.lon : "");
+      var nm = fname || fnum;
+      var a = document.createElement("a"); a.className = "btn btn--primary btn--block"; a.target = "_blank"; a.rel = "noopener"; a.textContent = (lang === "zu" ? "Thumela umyalezo ku-" : "Message ") + nm + (lang === "zu" ? " ku-WhatsApp" : " on WhatsApp"); a.href = "https://wa.me/" + digits + "?text=" + encodeURIComponent(text);
+      var b = document.createElement("a"); b.className = "btn btn--secondary btn--block"; b.textContent = (lang === "zu" ? "Thumela i-SMS ku-" : "Text ") + nm; b.href = "sms:" + fnum + "?&body=" + encodeURIComponent(text);
+      box.appendChild(a); box.appendChild(b); box.hidden = false;
+    }
     step(3); if (navigator.vibrate) navigator.vibrate(20);
   } catch (e) {
     err.hidden = false; err.textContent = e.offline ? (lang === "zu" ? "Awunaso isignali. Shayela u-10111 uma usengozini." : "No signal. If you are in danger, call 10111.") : (e.message || "Something went wrong.");

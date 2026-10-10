@@ -61,9 +61,10 @@ REFERRAL_TYPES = {
     "saps_flying": "SAPS Flying Squad",
     "saps_intel": "SAPS Crime Intelligence",
     "saps_detective": "SAPS Detective Service",
+    "forensic_supply": "SAPS evidence kit supply",
 }
 # Units inside SAPS. HQ DIRECTS these; everything else is a REFERRAL out of SAPS.
-SAPS_UNIT_TYPES = {"saps_cluster", "saps_flying", "saps_intel", "saps_detective", "fcs_unit"}
+SAPS_UNIT_TYPES = {"saps_cluster", "saps_flying", "saps_intel", "saps_detective", "fcs_unit", "forensic_supply"}
 
 # Optional, self-described. Collected only when the citizen chooses to give them.
 GENDERS = ["female", "male", "other", "undisclosed"]
@@ -90,3 +91,23 @@ def crime_label(key, lang="en"):
 def options(table, lang="en"):
     idx = 1 if lang == "zu" else 0
     return [{"key": k, "label": v[idx]} for k, v in table.items()]
+
+
+# What a GBV file may need on the ground. The station must say, for each one, whether it has it.
+# D1 is the adult sexual assault evidence kit and D7 the kit for a child under 13 (the names SAPS uses).
+GBV_NEEDS = {
+    "female_officer": "Female officer to attend",
+    "counsellor": "Counsellor or victim support",
+    "kit_d1": "Evidence kit for an adult (D1 rape kit)",
+    "kit_d7": "Evidence kit for a child under 13 (D7 rape kit)",
+    "medical": "Medical examination and treatment (including PEP within 72 hours)",
+    "vfr": "Victim Friendly Room",
+    "transport": "Transport to a care centre",
+    "shelter": "A safe place to stay",
+    "protection_order": "Help with a protection order",
+}
+# Who is asked when a station says it does not have something.
+GBV_FALLBACK = {
+    "female_officer": "cluster", "counsellor": "sw-counsellor", "kit_d1": "kit-supply", "kit_d7": "kit-supply",
+    "medical": "health-addington", "vfr": "tcc-gizenga", "transport": "ride-demo", "shelter": "shelter-durban", "protection_order": "sw-fam",
+}

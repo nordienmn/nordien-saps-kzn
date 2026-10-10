@@ -90,6 +90,9 @@ window.CITIZEN_I18N = {
     failT: "We could not reach the desk", failB: "Please call 10111 now.", failCall: "Call 10111", failRetry: "Try again",
     micOff: "Microphone is blocked. You can still type.", capOn: "Captions are on",
     limitNote: "Demo calls and videos last one minute.",
+    pGender: "Gender", pAge: "Age group", gU: "Prefer not to say", gF: "Female", gM: "Male", gO: "Other",
+    pTrusted: "Trusted person (optional)", pTrustedHint: "Told when you ask for help from the GBV form or the weather screen.", pFName: "Their name", pFMobile: "Their mobile number",
+    tellFriend: "Tell {name} now", tellWa: "Message {name} on WhatsApp", tellSms: "Text {name}", tellBody: "I need help. Please call me or come to me.",
   },
   zu: {
     skip: "Eqa uye kokuqukethwe okuyinhloko",
@@ -173,6 +176,9 @@ window.CITIZEN_I18N = {
     failT: "Asikwazanga ukufinyelela ehhovisi", failB: "Sicela ushayele u-10111 manje.", failCall: "Shayela u-10111", failRetry: "Zama futhi",
     micOff: "Imakrofoni ivaliwe. Usengabhala.", capOn: "Amagama abhalwayo avuliwe",
     limitNote: "Amakholi namavidiyo e-demo amaminithi angu-1.",
+    pGender: "Ubulili", pAge: "Iminyaka", gU: "Angithandi ukusho", gF: "Owesifazane", gM: "Owesilisa", gO: "Okunye",
+    pTrusted: "Umuntu omethembayo (akuphoqelekile)", pTrustedHint: "Uyatshelwa uma ucela usizo efomini ye-GBV noma esikrinini sezulu.", pFName: "Igama lakhe", pFMobile: "Inombolo yakhe yefoni",
+    tellFriend: "Tshela u-{name} manje", tellWa: "Thumela umyalezo ku-{name} ku-WhatsApp", tellSms: "Thumela i-SMS ku-{name}", tellBody: "Ngidinga usizo. Sicela ungishayele noma weze kimi.",
   },
 };
 

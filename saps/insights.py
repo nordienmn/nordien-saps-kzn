@@ -187,6 +187,22 @@ def build(cases, tips, refs):
         "directions_overdue": sum(1 for r in refs if r.get("origin") == "board" and r["status"] != "completed" and r.get("due_at") and t > r["due_at"]),
     }
 
+    # ---- GBV readiness: what stations had ready and what they could not supply (counts only)
+    gbv_needs = {}
+    for c in cases:
+        if c["kind"] not in ("gbv", "sos"):
+            continue
+        for d in c.get("deployments", []):
+            for need, v in d.get("needs", {}).items():
+                row = gbv_needs.setdefault(need, {"asked": 0, "available": 0, "unavailable": 0})
+                row["asked"] += 1
+                if v["status"] in ("available", "unavailable"):
+                    row[v["status"]] += 1
+    out["gbv_needs"] = [{"key": k, "label": taxonomy.GBV_NEEDS[k], "asked": _cell(v["asked"]), "available": _cell(v["available"]), "unavailable": _cell(v["unavailable"]), "_u": v["unavailable"]}
+                        for k, v in sorted(gbv_needs.items(), key=lambda kv: -kv[1]["unavailable"])]
+    for row in out["gbv_needs"]:
+        row.pop("_u", None)
+
     # ---- the anonymous tip pipeline: desk checks, HQ oversees
     verified_at = [x["verification"]["at"] - x["created_at"] for x in tips if x.get("verification")]
     hq_wait = []

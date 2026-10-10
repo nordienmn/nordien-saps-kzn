@@ -516,7 +516,7 @@ def test_shift_record_has_officer_id_and_photos_in_and_out_and_hq_can_view_it(cl
     assert client.post("/api/auth/logout", json={}).status_code == 200  # signed out without a photo: recorded and flagged
     assert client.get("/api/staff/shifts").status_code == 401  # a desk officer cannot read the shift log
     login(client, "board")
-    shifts = client.get("/api/staff/shifts").json["shifts"]
+    shifts = client.get("/api/staff/shifts?limit=100").json["shifts"]
     first = next(x for x in shifts if x["officer_id"] == "Thandi Mkhize")
     second = next(x for x in shifts if x["officer_id"] == "4471")
     assert first["has_in_photo"] and first["has_out_photo"] and first["out_at"] and first["section_label"] == "Call centre"
@@ -528,3 +528,146 @@ def test_shift_record_has_officer_id_and_photos_in_and_out_and_hq_can_view_it(cl
 def test_photo_requirement_can_be_switched_off_for_a_laptop_with_no_camera(client, monkeypatch):
     monkeypatch.setattr(Config, "REQUIRE_SIGNIN_PHOTO", False)
     assert login(client, photo="").status_code == 200
+
+
+
+def test_staff_sign_in_records_are_searched_and_paged_on_the_server(client):
+    for n in range(30):
+        login(client, section="desk" if n % 2 else "gbv", officer=f"Zed{chr(97 + n % 26)}{chr(97 + n // 26)}")
+        client.post("/api/auth/logout", json={"photo": PHOTO})
+    login(client, "board")
+    first = client.get("/api/staff/shifts?limit=10").json
+    assert len(first["shifts"]) == 10 and first["pages"] >= 4 and first["total"] >= 35 and first["counts"]["all"] == first["total"]
+    page2 = client.get("/api/staff/shifts?limit=10&page=2").json
+    assert page2["page"] == 2 and {x["id"] for x in page2["shifts"]}.isdisjoint({x["id"] for x in first["shifts"]})
+    one = client.get("/api/staff/shifts?q=zedha").json
+    assert one["total"] == 1 and one["shifts"][0]["officer_id"] == "Zedha"
+    gbv = client.get("/api/staff/shifts?section=gbv&limit=100").json
+    assert gbv["shifts"] and all(x["section"] == "gbv" for x in gbv["shifts"])
+    assert client.get("/api/staff/shifts?q=gbv desk zedka").json["total"] == 1
+    assert client.get("/api/staff/shifts?q=zzzz").json["total"] == 0
+
+
+
+def test_call_record_file_has_the_chat_and_the_callers_recording_is_saved(client):
+    start = client.post("/api/c/call/start", json={"mode": "video", **UMLAZI}).json
+    cid, t = start["id"], start["ctoken"]
+    assert client.post(f"/api/c/call/{cid}/recording?t=wrong", data=b"AAAA", headers={"Content-Type": "video/webm"}).status_code == 422
+    assert client.post(f"/api/c/call/{cid}/recording?t={t}", data=b"AAAA", headers={"Content-Type": "video/webm"}).json["size"] == 4
+    assert client.get(f"/api/c/call/{cid}/state?t={t}").json["recording"] is True
+    login(client, section="call_centre")
+    client.post(f"/api/staff/case/{cid}/answer", json={})
+    client.post(f"/api/c/call/{cid}/line", json={"t": t, "text": "I need help now"})
+    client.post(f"/api/staff/case/{cid}/line", json={"text": "We are with you"})
+    client.post(f"/api/c/call/{cid}/end", json={"t": t})
+    rec = client.get(f"/api/staff/case/{cid}/record.txt")
+    assert rec.status_code == 200 and "attachment" in rec.headers["Content-Disposition"]
+    body = rec.data.decode()
+    assert "CALL RECORD" in body and "Caller (typed): I need help now" in body and "Officer (typed): We are with you" in body and "saved on the file" in body
+    detail = client.get(f"/api/staff/case/{cid}").json
+    media = next(m for m in detail["media"] if m["type"] == "recording")
+    assert client.get(f"/api/staff/blob/{media['id']}").data == b"AAAA"
+    login(client, section="desk")
+    assert client.get(f"/api/staff/case/{cid}/record.txt").status_code == 403  # another section cannot download it
+
+
+
+def test_the_call_folder_travels_with_the_file_to_every_action_point(client):
+    start = client.post("/api/c/call/start", json={"mode": "video", "name": "Sam", "mobile": "0600000444", **UMLAZI}).json
+    cid, t = start["id"], start["ctoken"]
+    client.post(f"/api/c/call/{cid}/recording?t={t}", data=b"REC1", headers={"Content-Type": "video/webm"})
+    login(client, section="call_centre")
+    client.post(f"/api/staff/case/{cid}/answer", json={})
+    client.post(f"/api/c/call/{cid}/line", json={"t": t, "text": "Two men at my gate"})
+    client.post(f"/api/staff/case/{cid}/line", json={"text": "Stay inside"})
+    client.post(f"/api/c/call/{cid}/end", json={"t": t})
+    client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi", "unit": "Patrol vehicle"})
+    client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "unit-flying-dbn"})
+    client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "health-addington", "consent_to_share": False})
+    client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "sw-dsd", "consent_to_share": True})
+    pts = {p["id"]: p["url"].split("?k=")[1] for p in client.get("/api/staff/action-points").json["points"]}
+    client.post("/api/auth/logout", json={})
+
+    def folder(ap):
+        tasks = client.get(f"/api/unit/{ap}/tasks?k={pts[ap]}").json["tasks"]
+        return next(x for x in tasks if x["case_id"] == cid)["folder"]
+
+    f = folder("st-umlazi")  # a SAPS station always gets the whole folder
+    assert [l["text"] for l in f["call"]["lines"]] == ["Two men at my gate", "Stay inside"]
+    rec = next(e for e in f["evidence"] if e["type"] == "recording")
+    assert client.get(f"/api/unit/st-umlazi/media/{rec['id']}?k={pts['st-umlazi']}").data == b"REC1"
+    assert folder("unit-flying-dbn")["call"]["lines"]  # a SAPS unit gets it too
+    assert folder("health-addington")["call"]["lines"]  # demo: the folder goes to every action point
+    assert folder("sw-dsd")["call"]["lines"]
+    assert client.get(f"/api/unit/health-addington/media/{rec['id']}?k={pts['health-addington']}").data == b"REC1"
+    assert client.get(f"/api/unit/st-pinetown/media/{rec['id']}?k={pts['st-pinetown']}").status_code == 404  # not their file
+
+
+
+def test_gbv_file_carries_needs_and_a_station_that_lacks_one_triggers_a_request_and_an_hq_alert(client):
+    login(client, section="gbv")
+    cid = client.post("/api/c/report", json={"kind": "crime", "type": "sexual_offence", **UMLAZI}).json["id"]
+    d = client.get(f"/api/staff/case/{cid}").json
+    assert d["kind"] == "gbv" and {"female_officer", "counsellor", "kit_d1", "medical", "vfr"} <= set(client.store.get("cases", cid)["needs"])
+    assert client.post(f"/api/staff/case/{cid}/action", json={"action": "needs", "needs": ["female_officer", "kit_d7"]}).status_code == 200
+    assert client.store.get("cases", cid)["needs"] == ["female_officer", "kit_d7"]
+    dep = client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi", "unit": "FCS unit", "needs": ["female_officer", "counsellor", "kit_d1"]}).json["deployment"]
+    assert set(dep["needs"]) == {"female_officer", "counsellor", "kit_d1"}
+    points = {p["id"]: p["url"].split("?k=")[1] for p in client.get("/api/staff/action-points").json["points"]}
+    tok = points["st-umlazi"]
+    client.post("/api/auth/logout", json={})
+    tasks = client.get(f"/api/unit/st-umlazi/tasks?k={tok}").json["tasks"]
+    mine = next(t for t in tasks if t["case_id"] == cid)
+    assert {n["key"]: n["status"] for n in mine["needs"]} == {"female_officer": "asked", "counsellor": "asked", "kit_d1": "asked"}
+    ok = client.post(f"/api/unit/st-umlazi/need?k={tok}", json={"task_id": mine["id"], "need": "female_officer", "answer": "available"})
+    no = client.post(f"/api/unit/st-umlazi/need?k={tok}", json={"task_id": mine["id"], "need": "kit_d1", "answer": "unavailable", "note": "Shelf is empty"})
+    assert ok.status_code == 200 and no.status_code == 200
+    case = client.store.get("cases", cid)
+    kit = case["deployments"][0]["needs"]["kit_d1"]
+    assert kit["status"] == "unavailable" and kit["request_partner"].startswith("SAPS Forensic Science")
+    req = client.store.get("referrals", kit["request_id"])
+    assert req["origin"] == "request" and req["urgency"] == "urgent" and "does not have" in req["instruction"]
+    login(client, "board")
+    feed = client.get("/api/staff/feed").json
+    gap = next(a for a in feed["attention"] if a["type"] == "gbv_gap")
+    assert "D1" in gap["label"] and "Umlazi" in gap["reason"]
+    assert any(r["label"].startswith("Evidence kit for an adult") for r in feed["insights"]["gbv_needs"])
+    assert "name" not in str(feed["insights"]["gbv_needs"])  # counts only
+
+
+def test_unconfirmed_gbv_needs_are_flagged_to_hq_after_ten_minutes(client):
+    import time
+
+    login(client, section="gbv")
+    cid = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "no", "contact_pref": "none", **UMLAZI}).json["id"]
+    client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi"})
+    client.store.patch("cases", cid, lambda c: c["deployments"][0].update(dispatched_at=time.time() - 700))
+    login(client, "board")
+    assert any(a["type"] == "gbv_unconfirmed" for a in client.get("/api/staff/feed").json["attention"])
+
+
+
+def test_a_registered_citizens_profile_is_on_every_file_they_open(client):
+    profile = {"name": "Nomsa Dube", "mobile": "0600000501", "home_address": "12 Jacaranda Rd, Umlazi", "gender": "female", "age_band": "25_34",
+               "friend": "0600000502", "friend_name": "Thandi", "registered": True, "lang": "zu"}
+    login(client, section="gbv")
+    gbv = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "no", "contact_pref": "none", **profile, **UMLAZI}).json["id"]
+    d = client.get(f"/api/staff/case/{gbv}").json
+    assert d["registered"] and d["name"] == "Nomsa Dube" and d["mobile"] == "0600000501" and d["home_address"].startswith("12 Jacaranda")
+    assert d["gender"] == "female" and d["age_band"] == "25_34" and d["friend"] == "0600000502" and d["friend_name"] == "Thandi" and d["language"] == "zu"
+    assert d["contact_pref"] == "none"  # she asked not to be called; the details are there to identify her, not to call her
+    login(client, section="desk")
+    crime = client.post("/api/c/report", json={"kind": "crime", "type": "theft", **profile, **UMLAZI}).json["id"]
+    c = client.get(f"/api/staff/case/{crime}").json
+    assert c["registered"] and c["mobile"] == "0600000501" and c["friend_name"] == "Thandi"
+    login(client, section="call_centre")
+    call = client.post("/api/c/call/start", json={"mode": "voice", **profile, **UMLAZI}).json["id"]
+    assert client.get(f"/api/staff/case/{call}").json["registered"]
+    # an anonymous tip and an unsafe-area report never carry a person
+    area = client.post("/api/c/report", json={"kind": "area", "type": "broken_light", **profile, **UMLAZI}).json["id"]
+    a = client.store.get("cases", area)
+    assert not a["registered"] and a["name"] == "" and a["home_address"] == "" and a["friend_name"] == ""
+    # HQ never sees any of it
+    login(client, "board")
+    feed = client.get("/api/staff/feed").json
+    assert "Nomsa" not in str(feed) and "0600000501" not in str(feed) and "Jacaranda" not in str(feed)

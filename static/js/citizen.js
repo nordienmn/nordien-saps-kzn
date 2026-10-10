@@ -215,6 +215,21 @@
 
   // ------------------------------------------------------------------ profile
   const getProfile = () => store("saps-profile");
+  // A registered citizen's profile goes onto every file they open (crime, GBV, call).
+  function profilePayload(p) {
+    return { name: p.name, mobile: p.mobile, home_address: p.addr || "", gender: p.gender || "undisclosed", age_band: p.age_band || "undisclosed", friend: p.friend || "", friend_name: p.friend_name || "", registered: true, lang, ...(p.face ? { face: p.face } : {}) };
+  }
+  function tellFriend(p, point) {
+    const box = $("#d-friend-box");
+    if (!p || !p.friend) { box.hidden = true; return; }
+    const digits = p.friend.replace(/[^\d+]/g, "").replace(/^0/, "27").replace(/^\+/, "");
+    const text = t("tellBody") + (point ? " https://www.openstreetmap.org/?mlat=" + point.lat + "&mlon=" + point.lon : "");
+    const nm = p.friend_name || p.friend;
+    $("#d-friend-t").textContent = t("tellFriend", { name: nm });
+    $("#d-friend-wa").textContent = t("tellWa", { name: nm }); $("#d-friend-wa").href = "https://wa.me/" + digits + "?text=" + encodeURIComponent(text);
+    $("#d-friend-sms").textContent = t("tellSms", { name: nm }); $("#d-friend-sms").href = "sms:" + p.friend + "?&body=" + encodeURIComponent(text);
+    box.hidden = false;
+  }
   let profileFace = "";
   function renderProfileHints() {
     const p = getProfile();
@@ -226,6 +241,7 @@
   function openProfile() {
     const p = getProfile() || {};
     $("#p-name").value = p.name || ""; $("#p-mobile").value = p.mobile || ""; $("#p-addr").value = p.addr || "";
+    $("#p-gender").value = p.gender || "undisclosed"; $("#p-age").value = p.age_band || "undisclosed"; $("#p-fname").value = p.friend_name || ""; $("#p-fmob").value = p.friend || "";
     profileFace = p.face || "";
     paintAvatar();
     formError("p-error", "");
@@ -246,7 +262,7 @@
     e.preventDefault();
     const name = $("#p-name").value.trim(), mobile = $("#p-mobile").value.trim();
     if (!name || !mobile) return formError("p-error", t("pNeed"));
-    store("saps-profile", { name, mobile, addr: $("#p-addr").value.trim(), face: profileFace });
+    store("saps-profile", { name, mobile, addr: $("#p-addr").value.trim(), face: profileFace, gender: $("#p-gender").value, age_band: $("#p-age").value, friend_name: $("#p-fname").value.trim(), friend: $("#p-fmob").value.trim() });
     toast(t("pSaved")); renderProfileHints(); go("home");
   });
   $("#p-clear").addEventListener("click", () => { store("saps-profile", null); profileFace = ""; toast(t("pCleared")); renderProfileHints(); go("home"); });
@@ -296,7 +312,7 @@
     const timeVal = $("#c-time").value;
     const body = { kind: "crime", type, ...w, note: $("#c-text").value.trim(), photos: photoState.c || [] };
     if (timeVal) body.occurred_at = new Date(timeVal).getTime();
-    if (useProfile) { body.name = p.name; body.mobile = p.mobile; if (p.face) body.face = p.face; }
+    if (useProfile) Object.assign(body, profilePayload(p));
     try {
       const r = await submitting($("#c-submit"), async () => {
         if (crimeVideo) {
@@ -341,12 +357,14 @@
     const body = {
       kind: "gbv", safe_now: safe, wants: $$('input[name="wants"]:checked').map((i) => i.value),
       know_person: $('input[name="know"]:checked').value, note: $("#g-text").value.trim(),
-      contact_pref: pref, mobile: pref === "none" ? "" : mobile, name: pref !== "none" && p ? p.name : "", ...whereValue("g"),
+      contact_pref: pref, mobile: pref === "none" ? "" : mobile, name: "", ...whereValue("g"),
     };
+    if (p) { Object.assign(body, profilePayload(p)); body.mobile = pref === "none" ? p.mobile : (mobile || p.mobile); }
     try {
       const r = await submitting($("#g-submit"), () => api("/api/c/report", { body }));
       $("#f-gbv").reset(); $("#g-danger").hidden = true; $("#g-mobile-f").hidden = true; resetWhere("g");
       showDone({ title: t("gDoneT"), body: t("gDoneBody") + " " + t("gHelpline"), ref: r.ref });
+      tellFriend(p, body.lat !== null && body.lat !== undefined ? { lat: body.lat, lon: body.lon } : null);
     } catch (err) {
       if (err.field === "mobile") fieldError("g-mobile", t("errMobile")); else if (err.field === "safe_now") $("#g-safe-e").textContent = t("gSafeQ"); else mapError("g", err);
     }
@@ -385,6 +403,7 @@
 
   // ------------------------------------------------------------------ confirmation screen
   function showDone(d) {
+    $("#d-friend-box").hidden = true;
     $("#d-title").textContent = d.title; $("#d-body").textContent = d.body;
     $("#d-ref-c").textContent = d.ref;
     const codeWrap = $("#d-code-wrap");
@@ -430,16 +449,39 @@
     $("#loc-text").textContent = call.point ? t("callLoc") : t("callNoLoc");
     const p = getProfile();
     const body = { mode, ...(call.point || {}) };
-    if (p) { body.name = p.name; body.mobile = p.mobile; body.address = p.addr || ""; if (p.face) body.face = p.face; }
+    if (p) Object.assign(body, profilePayload(p));
     try {
       const r = await api("/api/c/call/start", { body });
       Object.assign(call, { id: r.id, ctoken: r.ctoken, ref: r.ref, video: r.video });
       $("#call-ref").textContent = r.ref; $("#sum-ref").textContent = r.ref; $("#ref-line").hidden = false;
       setState("ringing");
+      startCallRecording();
       pollTimer = setInterval(pollCall, 1000);
     } catch (e) {
       setState("failed");
     }
+  }
+
+  // The caller's own phone records the call and sends it to the file in pieces. Nothing is kept if they refuse the microphone.
+  async function startCallRecording() {
+    if (!window.MediaRecorder || !navigator.mediaDevices || !call) return;
+    const id = call.id, tok = call.ctoken, mode = call.mode;
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: mode === "video" ? { facingMode: "user", width: { ideal: 640 } } : false }); }
+    catch (e) { toast(t("micOff")); return; }
+    if (!call || call.id !== id) { stream.getTracks().forEach((x) => x.stop()); return; }
+    call.stream = stream;
+    if (mode === "video") { const v = $("#v-self"); if (v) { v.srcObject = stream; v.play().catch(() => {}); } $("#pip").hidden = false; }
+    try {
+      const rec = new MediaRecorder(stream, MediaRecorder.isTypeSupported("video/webm") ? { mimeType: "video/webm" } : undefined);
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) fetch(`/api/c/call/${id}/recording?t=${encodeURIComponent(tok)}`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "video/webm" }, body: e.data }).catch(() => {}); };
+      rec.start(4000); call.rec = rec;
+    } catch (e) { /* recording is best effort; the call goes on */ }
+  }
+  function stopCallRecording() {
+    if (!call) return;
+    try { if (call.rec && call.rec.state !== "inactive") call.rec.stop(); } catch (e) { /* ok */ }
+    setTimeout(() => { try { if (call && call.stream) call.stream.getTracks().forEach((x) => x.stop()); } catch (e) { /* ok */ } }, 1200);
   }
 
   function setState(s) {
@@ -520,6 +562,7 @@
 
   function finishCall(s) {
     clearInterval(pollTimer); clearInterval(tickTimer);
+    stopCallRecording();
     leaveVideo();
     const secs = s.answered_at ? Math.max(0, (s.ended_at || Date.now() / 1000) - s.answered_at) : 0;
     $("#dur").textContent = fmtClock(secs);
@@ -538,7 +581,7 @@
     }
   }
   function closeCall() {
-    clearInterval(pollTimer); clearInterval(tickTimer); leaveVideo();
+    clearInterval(pollTimer); clearInterval(tickTimer); stopCallRecording(); leaveVideo();
     setCallScreen(false); call = null;
     go("home"); route();
   }

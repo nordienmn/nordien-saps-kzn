@@ -73,6 +73,50 @@
     data.tasks.forEach((t) => body.appendChild(taskCard(t)));
   }
 
+  function mmss(sec) { sec = Math.max(0, Math.floor(sec || 0)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+  function transcriptText(t) {
+    const f = t.folder.call;
+    const lines = ["SAPS KZN DEMO. CALL RECORD (synthetic demonstration data)", "Reference: " + t.case_ref, "Type: " + (f.mode === "video" ? "Video call" : "Voice call"),
+      "Answered by: " + (f.operator || "n/a"), "Duration: " + (f.duration != null ? mmss(f.duration) : "n/a"), "-".repeat(60)];
+    f.lines.forEach((l) => lines.push("[" + new Date(l.at * 1000).toLocaleTimeString("en-ZA") + "] " + (l.who === "citizen" ? "Caller" : "Officer") + " (" + l.src + "): " + l.text));
+    return lines.join("\n") + "\n";
+  }
+  function folderBlock(t) {
+    const f = t.folder;
+    if (!f) return null;
+    const media = (e) => {
+      const src = `/api/unit/${encodeURIComponent(apId)}/media/${encodeURIComponent(e.id)}${q}`;
+      if (e.type === "recording" || e.type === "video") return h("div", h("p.label-caps", { text: e.type === "recording" ? "Call recording" + (e.source === "caller" ? " (caller's phone)" : "") : "Video from the citizen" }), h("video", { controls: true, preload: "metadata", src, style: "width:100%;border-radius:var(--radius-md);background:#000" }));
+      if (e.type === "audio") return h("div", h("p.label-caps", { text: "Audio from the citizen" }), h("audio", { controls: true, preload: "metadata", src, style: "width:100%" }));
+      const slot = h("div");
+      slot.appendChild(h("button.btn.btn--secondary", { type: "button", onclick: async (ev) => { ev.currentTarget.disabled = true; try { const r = await api(src); clear(slot); slot.appendChild(h("img", { src: r.data_url, alt: "Picture from the citizen", style: "max-width:100%;border-radius:var(--radius-md)" })); } catch (er) { toast(er.message, true); } } }, icon("image"), "Show picture"));
+      return slot;
+    };
+    const parts = [];
+    if (f.call) {
+      parts.push(h("p.muted.text-sm", { text: (f.call.mode === "video" ? "Video call" : "Voice call") + (f.call.operator ? " answered by " + f.call.operator : "") + (f.call.duration != null ? " · " + mmss(f.call.duration) : "") }));
+      parts.push(h("ul.transcript__list", ...f.call.lines.map((l) => h("li.transcript__line" + (l.who === "citizen" ? ".transcript__line--you" : ""), h("span.transcript__who", { text: l.who === "citizen" ? "Caller" : "Officer" }), h("span.transcript__text", { text: l.text })))));
+      parts.push(h("button.btn.btn--secondary", { type: "button", onclick: () => { const a = h("a", { href: URL.createObjectURL(new Blob([transcriptText(t)], { type: "text/plain" })), download: "call-record-" + t.case_ref + ".txt" }); document.body.appendChild(a); a.click(); a.remove(); } }, icon("download"), "Download call record (.txt)"));
+    }
+    f.evidence.forEach((e) => parts.push(media(e)));
+    return h("details.card.card--sunken.card--tight", { open: f.call && f.call.lines.length ? true : null }, h("summary.label-caps", { style: "cursor:pointer;min-height:2rem;display:flex;align-items:center", text: "Folder: call record and evidence" }), h("div.stack.stack--3", { style: "margin-top:var(--space-2)" }, ...parts));
+  }
+
+  async function answerNeed(t, n, answer) {
+    const note = answer === "unavailable" ? await askNote("We do not have: " + n.label) : "";
+    if (note === null) return;
+    try { await api(`/api/unit/${encodeURIComponent(apId)}/need${q}`, { body: { task_id: t.id, need: n.key, answer, note, k: token } }); toast(answer === "available" ? "Recorded: you have it" : "Recorded. The request has gone out."); last = ""; await load(); }
+    catch (e) { toast(e.message, true); }
+  }
+  function needsBlock(t) {
+    if (!t.needs || !t.needs.length) return null;
+    return h("div.card.card--sunken.card--tight", h("div.card__head", h("h3.card__title", { text: "Have ready for this file" }), h("span.chip.chip--danger", { text: "GBV: national priority" })),
+      h("p.muted.text-sm", { text: "Tell the control room, for each item, whether your station has it. If you do not, the request goes out automatically to who can supply it." }),
+      h("ul.mini-list", ...t.needs.map((n) => h("li", h("span", h("b", { text: n.label }), n.note ? h("span.muted", { text: " · " + n.note }) : null),
+        n.status === "asked" ? h("span.chip-row", h("button.btn.btn--primary.btn--sm", { type: "button", onclick: () => answerNeed(t, n, "available") }, "We have it"), h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => answerNeed(t, n, "unavailable") }, "We do not have it"))
+          : n.status === "available" ? h("span.chip.chip--closed", { text: "Has it ready" }) : h("span.chip.chip--danger", { text: "Requested from " + (n.request_partner || "another unit") })))));
+  }
+
   function taskCard(t) {
     const next = (NEXT[t.kind] || {})[t.status];
     const late = t.due_at && !t.closed && Date.now() / 1000 > t.due_at;
@@ -83,6 +127,8 @@
           late ? h("span.chip.chip--danger", { text: "Overdue" }) : null)),
       t.instruction ? h("p.task__instr", { text: t.instruction }) : null,
       t.detail ? h("p", { text: t.detail }) : null,
+      needsBlock(t),
+      folderBlock(t),
       h("dl.kv", ...[
         ["Where", [t.address, t.cluster].filter(Boolean).join(", ") || "Not given"],
         t.lat !== null && t.lat !== undefined ? ["Map", h("a", { href: `https://www.openstreetmap.org/?mlat=${t.lat}&mlon=${t.lon}#map=17/${t.lat}/${t.lon}`, target: "_blank", rel: "noopener" }, "Open the location")] : null,
