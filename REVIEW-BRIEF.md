@@ -89,6 +89,4 @@ Then:
 - Global comparison against Dubai Police Eye, Abu Dhabi Aman, Tokyo Digi Police, Beijing 110. Anonymous versus named, evidence, language, call handling, senior oversight.
 - Recommendations, in priority order, that can be built into this demo without adding a new GCP project.
 
-Do not create a new Google Cloud project. Billing is already on nordien-saps-kzn. If a fix is needed, change the repo and give the exact Cloud Shell command:
-
-cd ~/nordien-saps-kzn && git pull && gcloud run deploy saps-kzn --source . --project nordien-saps-kzn --region africa-south1 --allow-unauthenticated --min-instances 1 --max-instances 1 --memory 512Mi --cpu 1 --quiet
+Do not change the code. Do not deploy. Do not create a project. Review only. Send the report back.
