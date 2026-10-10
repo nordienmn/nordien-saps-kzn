@@ -43,23 +43,33 @@
     </header>
   </div>
 
-  <section class="escalations" id="esc" aria-labelledby="esc-title">
-    <div class="escalations__label"><span class="escalations__title" id="esc-title">Needs HQ action</span><span class="escalations__hint" id="esc-hint" role="status" aria-live="polite"></span></div>
-    <ul class="escalations__list" id="esc-list"></ul>
+  <section class="actionbar" id="esc" aria-label="Needs HQ action">
+    <div class="actionbar__row">
+      <button type="button" class="actionbar__toggle" id="esc-toggle" aria-expanded="false" aria-controls="esc-panel">
+        <span class="actionbar__title">Needs HQ action</span>
+        <span class="actionbar__count" id="esc-count">0</span>
+        <span class="actionbar__hint" id="esc-hint" role="status" aria-live="polite"></span>
+        <svg class="icon icon--sm actionbar__chev" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-chevron-down"/></svg>
+      </button>
+      <ul class="actionbar__peek" id="esc-peek"></ul>
+    </div>
+    <div class="actionbar__panel" id="esc-panel" hidden>
+      <ul class="actionbar__list" id="esc-list"></ul>
+    </div>
   </section>
 
   <main class="board" id="board">
     <section class="kpis" aria-label="Key figures" id="kpis"></section>
     <div class="segmented tabs-bar" role="tablist" aria-label="Board sections" id="tabs">
       <button type="button" class="segmented__btn" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-      <button type="button" class="segmented__btn" role="tab" data-tab="tips" aria-selected="false" tabindex="-1">Anonymous tips <span class="segmented__count segmented__count--alert" id="tab-tips-n">0</span></button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="tips" aria-selected="false" tabindex="-1">Tips <span class="segmented__count segmented__count--alert" id="tab-tips-n">0</span></button>
       <button type="button" class="segmented__btn" role="tab" data-tab="deploy" aria-selected="false" tabindex="-1">Deployments</button>
-      <button type="button" class="segmented__btn" role="tab" data-tab="people" aria-selected="false" tabindex="-1">Crime and people</button>
-      <button type="button" class="segmented__btn" role="tab" data-tab="refs" aria-selected="false" tabindex="-1">Referrals and directions</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="people" aria-selected="false" tabindex="-1">Crime &amp; people</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="refs" aria-selected="false" tabindex="-1">Referrals</button>
       <button type="button" class="segmented__btn" role="tab" data-tab="perf" aria-selected="false" tabindex="-1">Performance</button>
       <button type="button" class="segmented__btn" role="tab" data-tab="shifts" aria-selected="false" tabindex="-1">Sign-in records</button>
       <button type="button" class="segmented__btn" role="tab" data-tab="audit" aria-selected="false" tabindex="-1">Access log</button>
-      <button type="button" class="segmented__btn" role="tab" data-tab="brief" aria-selected="false" tabindex="-1">Daily brief</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="brief" aria-selected="false" tabindex="-1">Brief</button>
     </div>
     <div id="panel" role="tabpanel" tabindex="-1"></div>
   </main>

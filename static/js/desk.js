@@ -614,17 +614,17 @@
       wrap.appendChild(h("p.muted.text-sm", { text: "A tip goes to HQ only after you verify it. HQ sees every tip anyway." }));
       paintLoads(); return wrap;
     }
-    const groups = {};
-    S.points.forEach((ap) => { (groups[ap.group] = groups[ap.group] || []).push(ap); });
-    const order = ["SAPS units", "Police stations", "Partners outside SAPS"];
-    order.forEach((g) => {
-      let list = groups[g] || [];
-      if (!list.length) return;
-      if (g === "SAPS units") list = list.filter((ap) => ap.type !== "saps_cluster").concat(list.filter((ap) => ap.type === "saps_cluster"));
-      const boxes = h("div.dock__boxes", ...list.map((ap) => box(ap, ap.type === "station" ? ap.cluster : undefined)));
-      const open = g === "SAPS units" || (g === "Partners outside SAPS" && d.kind !== "crime") || (g === "Police stations" && d.kind !== "area");
-      wrap.appendChild(h("details.dock__group", { open: open ? true : null }, h("summary.label-caps", { style: "cursor:pointer;min-height:2rem;display:flex;align-items:center", text: g + " (" + list.length + ")" }), boxes));
-    });
+    const byType = (f) => S.points.filter(f);
+    // The most used targets stay in view; everything else folds away so the page stays short.
+    const quick = byType((ap) => ap.group === "SAPS units" && ap.type !== "saps_cluster");
+    wrap.appendChild(h("div.dock__quick", ...quick.map((ap) => box(ap, ap.cluster))));
+    const sub = (title, list) => list.length ? h("div.dock__sub", h("p.label-caps", { text: title + " (" + list.length + ")" }), h("div.dock__boxes", ...list.map((ap) => box(ap)))) : null;
+    wrap.appendChild(h("details.dock__group", { open: d.kind === "gbv" || d.kind === "sos" || d.kind === "area" ? true : null },
+      h("summary.label-caps", { style: "cursor:pointer;min-height:1.75rem;display:flex;align-items:center", text: "More places to send: stations, cluster commanders, partners" }),
+      h("div.stack.stack--3", { style: "margin-top:var(--space-2)" },
+        sub("Police stations", byType((ap) => ap.type === "station")),
+        sub("Cluster commanders", byType((ap) => ap.type === "saps_cluster")),
+        sub("Partners outside SAPS", byType((ap) => ap.group === "Partners outside SAPS")))));
     setTimeout(paintLoads, 0);
     return wrap;
   }

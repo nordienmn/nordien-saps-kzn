@@ -59,23 +59,51 @@
     renderAttention(); renderKpis(); renderTabs(); renderPanel();
   }
 
-  // ------------------------------------------------------------------ needs HQ action
+  // ------------------------------------------------------------------ needs HQ action (slim bar + dropdown)
+  const ATT_KIND = {
+    verified_referral: ["Verified referral", "escalate"], tip_waiting: ["Tip waiting", "eye-off"], unanswered_call: ["Call unanswered", "phone"],
+    past_limit: ["Past time limit", "clock"], direction_overdue: ["Direction overdue", "alert"], referral_unacknowledged: ["Referral not acknowledged", "referral"],
+  };
+  function openPanel(on) {
+    const panel = $("esc-panel"), tog = $("esc-toggle");
+    panel.hidden = !on; tog.setAttribute("aria-expanded", String(on));
+    $("esc").classList.toggle("is-open", on);
+  }
+  $("esc-toggle").addEventListener("click", () => openPanel($("esc-panel").hidden));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("esc-panel").hidden) { openPanel(false); $("esc-toggle").focus(); } });
+  document.addEventListener("click", (e) => { if (!$("esc-panel").hidden && !$("esc").contains(e.target)) openPanel(false); });
+
+  function attRow(a) {
+    const isTip = a.kind === "tip";
+    const [word, ico] = ATT_KIND[a.type] || ["Needs attention", "alert"];
+    return h("li.actionbar__item" + (a.severity === 1 ? ".actionbar__item--urgent" : ""),
+      h("span.actionbar__dot", { "aria-hidden": "true" }),
+      h("span.actionbar__what", h("b", { text: a.label + (a.cluster_name ? ", " + a.cluster_name : "") }), h("span.muted", { text: " " + a.ref })),
+      h("span.actionbar__why", icon(ico, "icon--sm"), word + " · " + fmtAge(a.since, nowS())),
+      h("span.actionbar__acts",
+        isTip && a.type === "verified_referral" ? h("button.btn.btn--primary.btn--sm", { type: "button", onclick: () => ackTip(a.id) }, "Acknowledge") : null,
+        a.type !== "unanswered_call" ? h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => { openPanel(false); directDlg(a.id, a.ref, a.label); } }, "Direct") : null,
+        isTip ? h("button.btn.btn--ghost.btn--sm", { type: "button", onclick: () => { openPanel(false); setTab("tips"); } }, "Open") : null));
+  }
+
   function renderAttention() {
     const list = S.feed.attention || [];
-    const ul = $("esc-list"); clear(ul);
-    const box = $("esc");
-    box.classList.toggle("escalations--clear", !list.length);
-    $("esc-hint").textContent = list.length ? list.length + " need" + (list.length === 1 ? "s" : "") + " your decision" : "Nothing is waiting for you";
-    list.slice(0, 6).forEach((a) => {
-      const isTip = a.kind === "tip";
-      ul.appendChild(h("li.escalation", { "data-new": a.type === "verified_referral" ? "true" : null },
-        h("div", h("p.escalation__title", { text: a.label + (a.cluster_name ? ", " + a.cluster_name : "") }),
-          h("p.escalation__meta", h("span.ref", { text: a.ref }), " · " + a.reason + " · " + fmtAge(a.since, nowS()) + " ago")),
-        h("div.escalation__act",
-          isTip && a.type === "verified_referral" ? h("button.btn.btn--primary", { type: "button", onclick: () => ackTip(a.id) }, icon("check"), "Acknowledge") : null,
-          a.type !== "unanswered_call" ? h("button.btn.btn--secondary", { type: "button", onclick: () => directDlg(a.id, a.ref, a.label) }, icon("escalate"), "Direct") : null,
-          isTip ? h("button.btn.btn--ghost", { type: "button", onclick: () => { setTab("tips"); } }, "Open") : null)));
+    const urgent = list.filter((a) => a.severity === 1).length;
+    $("esc").classList.toggle("actionbar--clear", !list.length);
+    $("esc").classList.toggle("actionbar--urgent", urgent > 0);
+    $("esc-count").textContent = String(list.length);
+    $("esc-hint").textContent = list.length ? (urgent ? urgent + " urgent" : "none urgent") : "Nothing is waiting for you";
+    // the top three at a glance, one line each
+    const peek = $("esc-peek"); clear(peek);
+    list.slice(0, 3).forEach((a) => {
+      const [word] = ATT_KIND[a.type] || ["Needs attention"];
+      peek.appendChild(h("li", h("button.actionbar__chip" + (a.severity === 1 ? ".actionbar__chip--urgent" : ""), { type: "button", title: a.reason, onclick: () => openPanel(true) },
+        h("span.actionbar__dot", { "aria-hidden": "true" }), h("span", { text: word + " · " + a.ref }), h("span.muted", { text: fmtAge(a.since, nowS()) }))));
     });
+    if (list.length > 3) peek.appendChild(h("li", h("button.actionbar__more", { type: "button", onclick: () => openPanel(true) }, "+" + (list.length - 3) + " more")));
+    // the full list, in the dropdown
+    const ul = $("esc-list"); clear(ul);
+    list.forEach((a) => ul.appendChild(attRow(a)));
     $("tab-tips-n").textContent = (S.feed.stats.hq_referrals_waiting || 0);
     $("tab-tips-n").hidden = !S.feed.stats.hq_referrals_waiting;
   }
@@ -155,7 +183,8 @@
       h("section.card.map-card", h("div.card__head", { style: "margin:0" }, h("h2.card__title", { text: "Where callers and reporters are" }),
         h("span.chip-row", layerBtn("cases", "Cases"), layerBtn("stations", "Stations deployed"), layerBtn("clusters", "Cluster totals"))),
         h("div.map", { id: "mapbox" }, h("div.map__canvas#leaflet")),
-        h("p.muted.text-sm", { text: "GBV, SOS and anonymous tips are never placed on the map. They appear only as banded totals per cluster (the small-number rule). Positions are rounded to about 100 m. Cluster centres and stations are approximate." })),
+        h("details", h("summary.muted.text-sm", { style: "cursor:pointer;min-height:1.5rem", text: "Privacy rules for this map" }),
+          h("p.muted.text-sm", { text: "GBV, SOS and anonymous tips are never placed on the map. They appear only as banded totals per cluster (the small-number rule). Positions are rounded to about 100 m. Cluster centres and stations are approximate." }))),
       h("section.card.feed", h("div.card__head", h("h2.card__title", { text: "Latest movement" }), h("span.chip.chip--neutral", { text: "No personal data" })),
         h("ul.feed__list", ...S.feed.cases.slice(0, 14).map((c) => h("li.feed-item", h("span.feed-item__time", { text: hhmm(c.created_at) }),
           h("div", h("div.feed-item__title", { text: c.label + ", " + c.cluster_name }),
@@ -309,14 +338,15 @@
     const total = (arr) => arr.reduce((a, x) => a + (typeof x.n === "number" ? x.n : 0), 0) || 1;
     p.appendChild(h("div.stack.stack--4",
       h("div.banner.banner--neutral", icon("users"), h("span", { text: "Gender and age are optional and self-described. They are counted in groups and never shown next to a name. A cell with fewer than 5 records shows as <5." })),
-      h("div.panel-grid.panel-grid--2",
+      h("div.panel-grid.panel-grid--3",
         card("Types of crime, last 7 days", h("span.chip.chip--neutral", { text: "Marker = previous 7 days" }),
-          bars(ins.by_type.map((t) => ({ label: t.label + (t.restricted ? " (restricted)" : ""), value: typeof t.this_week === "number" ? t.this_week : 0, text: t.this_week, ghost: typeof t.last_week === "number" ? t.last_week : 0, cls: t.restricted ? "bars__fill--accent" : "" })))),
+          bars(ins.by_type.slice(0, 9).map((t) => ({ label: t.label + (t.restricted ? " (restricted)" : ""), value: typeof t.this_week === "number" ? t.this_week : 0, text: t.this_week, ghost: typeof t.last_week === "number" ? t.last_week : 0, cls: t.restricted ? "bars__fill--accent" : "" })))),
         card("When reports come in", null, h("p.label-caps", { text: "By hour of day" }), cols(ins.by_hour, Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00"), peak),
-          h("p.label-caps", { style: "margin-top:var(--space-4)", text: "By day of week" }), cols(ins.by_weekday, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], ins.by_weekday.indexOf(Math.max(...ins.by_weekday))))),
-      h("div.panel-grid.panel-grid--2",
-        card("Gender", null, bars(ins.gender.map((g) => ({ label: g.label, value: typeof g.n === "number" ? g.n : 0, text: g.n === "<5" ? "<5" : Math.round(100 * g.n / total(ins.gender)) + "% (" + g.n + ")" })))),
-        card("Age group", null, bars(ins.age.map((g) => ({ label: g.label, value: typeof g.n === "number" ? g.n : 0, text: g.n === "<5" ? "<5" : Math.round(100 * g.n / total(ins.age)) + "% (" + g.n + ")", cls: "bars__fill--accent" }))))),
+          h("p.label-caps", { style: "margin-top:var(--space-3)", text: "By day of week" }), cols(ins.by_weekday, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], ins.by_weekday.indexOf(Math.max(...ins.by_weekday)))),
+        card("Gender and age group", null,
+          bars(ins.gender.map((g) => ({ label: g.label, value: typeof g.n === "number" ? g.n : 0, text: g.n === "<5" ? "<5" : Math.round(100 * g.n / total(ins.gender)) + "% (" + g.n + ")" }))),
+          h("p.label-caps", { style: "margin-top:var(--space-3)", text: "Age" }),
+          bars(ins.age.map((g) => ({ label: g.label, value: typeof g.n === "number" ? g.n : 0, text: g.n === "<5" ? "<5" : Math.round(100 * g.n / total(ins.age)) + "% (" + g.n + ")", cls: "bars__fill--accent" }))))),
       h("div.panel-grid.panel-grid--2",
         card("Crime type by gender", null, matrix(["Type", "Female", "Male", "Other", "Not given"], ins.crime_by_gender.map((r) => [r.label, r.female, r.male, r.other, r.undisclosed]))),
         card("Age group by gender", null, matrix(["Age group", "Female", "Male", "Other", "Not given"], ins.age_by_gender.map((r) => [r.label, r.female, r.male, r.other, r.undisclosed])))),
