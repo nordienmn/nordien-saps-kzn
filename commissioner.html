@@ -3,65 +3,116 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SAPS KZN · Senior leadership</title>
+<title>SAPS KZN · Commissioner</title>
 <style>
   body { margin: 0; background: #07101c; color: #e7edf6; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
   header { padding: 14px 16px; background: #0a1730; border-bottom: 3px solid #d4af37; display: flex; justify-content: space-between; align-items: center; }
-  a { color: #d4af37; font-size: 13px; margin-left: 12px; }
+  a { color: #d4af37; font-size: 13px; }
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 16px; }
   .kpi { background: #121c30; border-bottom: 3px solid #d4af37; padding: 12px; }
   .kpi b { display: block; font-size: 26px; }
-  h2 { margin: 16px 16px 6px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: #d4af37; }
-  .flash { background: #8f1d24; animation: pulse 1s infinite; border-radius: 12px; padding: 12px; margin: 8px 16px; }
-  @keyframes pulse { 50% { opacity: .55; } }
-  .card { background: #121c30; margin: 8px 16px; padding: 10px; border-radius: 10px; }
-  .cas { color: #d4af37; font-family: ui-monospace, monospace; font-size: 13px; }
+  .filters { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 0 16px 12px; }
+  select { width: 100%; padding: 10px; border: 0; border-radius: 8px; font-family: inherit; }
+  .board { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; padding: 0 16px 20px; }
+  .panel { background: #121c30; border-radius: 12px; padding: 12px; }
+  h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #d4af37; }
+  svg { width: 100%; height: 360px; background: #0b1220; border-radius: 10px; }
+  .dot { cursor: pointer; }
+  .card { background: #0b1220; border-radius: 10px; padding: 10px; margin: 8px 0; }
+  .cas { color: #d4af37; font-family: ui-monospace, monospace; font-size: 12px; }
   .fine { color: #93a4bd; font-size: 13px; }
+  .flash { background: #8f1d24; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  @media (max-width: 800px) { .filters, .board, .kpis { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<header>
-  <b>SENIOR LEADERSHIP · KZN</b>
-  <div><a href="/desk">Desk</a><a href="/brief">Brief</a></div>
-</header>
+<header><b>COMMISSIONER · KZN</b><a href="/desk">Desk</a></header>
 <div class="kpis">
-  <div class="kpi"><b id="all">0</b><span>All received</span></div>
-  <div class="kpi"><b id="cases">0</b><span>Cases</span></div>
+  <div class="kpi"><b id="all">0</b><span>Received</span></div>
+  <div class="kpi"><b id="open">0</b><span>Open</span></div>
   <div class="kpi"><b id="tips">0</b><span>Anonymous</span></div>
-  <div class="kpi"><b id="red">0</b><span>Referred up</span></div>
+  <div class="kpi"><b id="gbv">0</b><span>GBV</span></div>
 </div>
-<h2>Unsafe infrastructure</h2>
-<div id="infra"></div>
-<h2>GBV</h2>
-<div id="gbv"></div>
-<h2>Anonymous tips</h2>
-<div id="tips"></div>
-<h2>All files</h2>
-<div id="list"></div>
+<div class="filters">
+  <select id="station"><option value="">All stations</option></select>
+  <select id="area"><option value="">All areas</option></select>
+  <select id="crime"><option value="">All crime types</option></select>
+  <select id="place"><option value="">All places</option></select>
+  <select id="date"><option value="">All dates</option><option value="today">Today</option><option value="week">This week</option></select>
+</div>
+<div class="board">
+  <div class="panel">
+    <h2>Cluster map</h2>
+    <svg id="map" viewBox="0 0 520 360"></svg>
+  </div>
+  <div class="panel">
+    <h2>Movement</h2>
+    <div id="list"></div>
+  </div>
+</div>
 <script>
-async function load() {
-  const reports = await (await fetch("/api/reports")).json();
-  const tips = reports.filter(c => c.kind === "tip");
-  const referred = tips.filter(c => c.desk === "commissioner" || c.status === "referred");
-  document.getElementById("all").textContent = reports.length;
-  document.getElementById("cases").textContent = reports.filter(c => c.kind !== "tip").length;
-  document.getElementById("tips").textContent = tips.length;
-  document.getElementById("red").textContent = referred.length;
-  document.getElementById("tips").innerHTML = tips.length
-    ? tips.map(c => `<div class="${c.desk === "commissioner" || c.status === "referred" ? "flash" : "card"}"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.address || "place not given"} · ${c.verified ? "verified" : "not acted on"} · ${c.desk || "tip-off"}</div></div>`).join("")
-    : `<div class="card"><div class="fine">No anonymous tips yet.</div></div>`;
-  const infra = reports.filter(c => c.kind === "area");
-  document.getElementById("infra").innerHTML = infra.length
-    ? infra.map(c => `<div class="card"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.address || "place not given"} · share with municipality</div></div>`).join("")
-    : `<div class="card"><div class="fine">No unsafe infrastructure reports.</div></div>`;
-  const gbv = reports.filter(c => c.label === "GBV" || c.label === "GBV SOS");
-  document.getElementById("gbv").innerHTML = gbv.length
-    ? gbv.map(c => `<div class="card"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.note || ""}</div></div>`).join("")
-    : `<div class="card"><div class="fine">No GBV files.</div></div>`;
-  document.getElementById("list").innerHTML = reports.map(c => `<div class="card"><div class="cas">${c.cas}</div>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label} · ${c.cluster || ""} · ${c.officer || "no officer yet"}</div>`).join("");
+const CLUSTERS = [
+  ["Durban Central", 250, 210], ["Umlazi", 270, 245], ["Chatsworth", 230, 235],
+  ["Pinetown", 210, 200], ["Inanda", 265, 175], ["Pietermaritzburg", 160, 150],
+  ["Richards Bay", 340, 90], ["Newcastle", 120, 60], ["Port Shepstone", 200, 300], ["Empangeni", 320, 110]
+];
+let reports = [];
+function fill(id, values) {
+  const el = document.getElementById(id);
+  const current = el.value;
+  el.innerHTML = `<option value="">${el.options[0].textContent}</option>` + values.map(v => `<option>${v}</option>`).join("");
+  el.value = current;
 }
+function filtered() {
+  const station = document.getElementById("station").value;
+  const area = document.getElementById("area").value;
+  const crime = document.getElementById("crime").value;
+  const place = document.getElementById("place").value;
+  const date = document.getElementById("date").value;
+  const now = Date.now() / 1000;
+  return reports.filter(c => {
+    if (station && (c.station || c.cluster) !== station) return false;
+    if (area && c.cluster !== area) return false;
+    if (crime && c.label !== crime) return false;
+    if (place && !(c.address || "").includes(place) && c.cluster !== place) return false;
+    if (date === "today" && now - (c.at || now) > 86400) return false;
+    if (date === "week" && now - (c.at || now) > 86400 * 7) return false;
+    return true;
+  });
+}
+function draw(items) {
+  const counts = {};
+  items.forEach(c => { const k = c.cluster || "Durban Central"; counts[k] = (counts[k] || 0) + 1; });
+  document.getElementById("map").innerHTML = `
+    <text x="20" y="28" fill="#d4af37" font-size="14">KWAZULU-NATAL CLUSTERS</text>
+    <path d="M70 40 L180 30 L300 50 L400 80 L430 160 L390 250 L300 320 L180 330 L90 260 L60 160 Z" fill="#16305a" stroke="#d4af37" />
+    ${CLUSTERS.map(([name, x, y]) => `<g class="dot" onclick="pick('${name}')"><circle cx="${x}" cy="${y}" r="${8 + (counts[name] || 0) * 3}" fill="${counts[name] ? "#c8102e" : "#d4af37"}" opacity=".9"/><text x="${x + 12}" y="${y + 4}" fill="#e7edf6" font-size="11">${name} ${counts[name] || 0}</text></g>`).join("")}`;
+}
+function pick(name) {
+  document.getElementById("area").value = name;
+  render();
+}
+function render() {
+  const items = filtered();
+  document.getElementById("all").textContent = items.length;
+  document.getElementById("open").textContent = items.filter(c => c.status !== "closed").length;
+  document.getElementById("tips").textContent = items.filter(c => c.kind === "tip").length;
+  document.getElementById("gbv").textContent = items.filter(c => c.label === "GBV" || c.label === "GBV SOS").length;
+  draw(items);
+  document.getElementById("list").innerHTML = items.map(c => `<div class="card ${c.kind === "tip" && (c.desk === "commissioner" || c.status === "referred") ? "flash" : ""}"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.cluster || ""} · ${c.station || c.cluster || ""} · ${c.address || "place not given"}</div><div class="fine">${c.status || "open"} · ${c.officer || "no officer"}</div></div>`).join("") || "<p class='fine'>Nothing for this filter.</p>";
+}
+async function load() {
+  reports = await (await fetch("/api/reports")).json();
+  fill("station", [...new Set(reports.map(c => c.station || c.cluster).filter(Boolean))]);
+  fill("area", [...new Set(reports.map(c => c.cluster).filter(Boolean))]);
+  fill("crime", [...new Set(reports.map(c => c.label).filter(Boolean))]);
+  fill("place", [...new Set(reports.map(c => c.address).filter(Boolean))]);
+  render();
+}
+document.querySelectorAll("select").forEach(el => el.onchange = render);
 load();
-setInterval(load, 2000);
+setInterval(load, 3000);
 </script>
 </body>
 </html>

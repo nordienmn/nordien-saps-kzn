@@ -6,14 +6,12 @@ STATIC = ROOT / "static"
 SEQ = 4206
 def cas(n):
     return f"CAS {n}/10/2026"
-REPORTS = [{
-    "id": "KZN-4206", "cas": cas(4206), "label": "Armed robbery", "pri": "alpha",
-    "cluster": "Durban Central", "name": "Thandi Mkhize", "mobile": "076 272 3701",
-    "address": "14 Oak Street, Berea, Durban", "named": True,
-    "note": "Two men at the gate. She cannot speak freely.", "status": "waiting",
-    "desk": "saps", "log": [], "face": "/static/face.jpg", "at": time.time()-40,
-    "crime": "Armed robbery", "call": "incoming", "transcript": "", "kind": "case", "officer": ""
-}]
+REPORTS = [
+    {"id": "KZN-4206", "cas": cas(4206), "label": "Armed robbery", "cluster": "Durban Central", "station": "Durban Central", "name": "Thandi Mkhize", "address": "14 Oak Street, Berea, Durban", "named": True, "note": "Two men at the gate.", "status": "open", "desk": "saps", "log": [], "at": time.time()-3600, "kind": "case", "officer": "OP-12"},
+    {"id": "KZN-4204", "cas": cas(4204), "label": "House break-in", "cluster": "Pinetown", "station": "Pinetown", "name": "Sipho Dlamini", "address": "New Germany", "named": True, "note": "Back door forced.", "status": "open", "desk": "saps", "log": [], "at": time.time()-7200, "kind": "case", "officer": ""},
+    {"id": "KZN-4203", "cas": cas(4203), "label": "GBV", "cluster": "Umlazi", "station": "Umlazi", "name": "", "address": "Umlazi V", "named": False, "note": "Help requested. Hospital.", "status": "open", "desk": "saps", "log": [], "at": time.time()-1800, "kind": "case", "officer": "GBV-01"},
+    {"id": "MUN-4202", "cas": "MUN 4202/10/2026", "label": "Park", "cluster": "Chatsworth", "station": "Chatsworth", "name": "", "address": "Chatsworth park", "named": False, "note": "Unsafe infrastructure.", "status": "open", "desk": "municipality", "log": [], "at": time.time()-5000, "kind": "area", "officer": ""}
+]
 TIPS = [{
     "id": "TIP-4205", "cas": "TIP 4205/10/2026", "label": "Suspicious vehicle", "cluster": "Inanda",
     "address": "KwaMashu Highway", "named": False, "note": "Anonymous tip. Name not stored.",
@@ -57,13 +55,13 @@ class App(BaseHTTPRequestHandler):
             SEQ += 1
             anonymous = data.get("kind") == "tip" or not data.get("named") and data.get("label", "").lower().startswith("anon")
             if data.get("kind") == "tip":
-                item = {"id": f"TIP-{SEQ}", "cas": f"TIP {SEQ}/10/2026", "label": data.get("label", "Tip"), "pri": "bravo", "cluster": data.get("cluster", "Durban Central"), "name": "", "mobile": "", "address": data.get("address", ""), "named": False, "note": data.get("note", "Anonymous tip. Name not stored."), "status": "waiting", "desk": "headoffice", "log": ["Tip received. Not a case."], "face": "", "at": time.time(), "crime": data.get("label", "Tip"), "call": "", "transcript": "", "kind": "tip", "verified": False}
+                item = {"id": f"TIP-{SEQ}", "cas": f"TIP {SEQ}/10/2026", "label": data.get("label", "Tip"), "pri": "bravo", "cluster": data.get("cluster", "Durban Central"), "station": data.get("station", data.get("cluster", "Durban Central")), "name": "", "mobile": "", "address": data.get("address", ""), "named": False, "note": data.get("note", "Anonymous tip. Name not stored."), "status": "waiting", "desk": "headoffice", "log": ["Tip received. Not a case."], "face": "", "at": time.time(), "crime": data.get("label", "Tip"), "call": "", "transcript": "", "kind": "tip", "verified": False}
                 TIPS.insert(0, item)
             elif data.get("kind") == "area":
-                item = {"id": f"MUN-{SEQ}", "cas": f"MUN {SEQ}/10/2026", "label": data.get("label", "Unsafe area"), "pri": "info", "cluster": data.get("cluster", "Durban Central"), "name": "", "mobile": "", "address": data.get("address", ""), "named": False, "note": data.get("note", "Unsafe area. For the municipality."), "status": "waiting", "desk": "municipality", "log": ["Unsafe area. Share with the municipality."], "face": "", "at": time.time(), "crime": data.get("label", "Unsafe area"), "call": "", "transcript": "", "kind": "area"}
+                item = {"id": f"MUN-{SEQ}", "cas": f"MUN {SEQ}/10/2026", "label": data.get("label", "Unsafe area"), "pri": "info", "cluster": data.get("cluster", "Durban Central"), "station": data.get("station", data.get("cluster", "Durban Central")), "name": "", "mobile": "", "address": data.get("address", ""), "named": False, "note": data.get("note", "Unsafe area. For the municipality."), "status": "waiting", "desk": "municipality", "log": ["Unsafe area. Share with the municipality."], "face": "", "at": time.time(), "crime": data.get("label", "Unsafe area"), "call": "", "transcript": "", "kind": "area"}
                 REPORTS.insert(0, item)
             else:
-                item = {"id": f"KZN-{SEQ}", "cas": cas(SEQ), "label": data.get("label", "Emergency"), "pri": "alpha", "cluster": data.get("cluster", "Durban Central"), "name": data.get("name", ""), "mobile": data.get("mobile", ""), "address": data.get("address", ""), "named": bool(data.get("named")), "note": data.get("note", ""), "status": "waiting", "desk": "saps", "log": ["File opened."], "face": "/static/face.jpg" if data.get("named") else "", "at": time.time(), "crime": data.get("label", "Emergency"), "call": data.get("call", ""), "transcript": "", "kind": "case", "officer": ""}
+                item = {"id": f"KZN-{SEQ}", "cas": cas(SEQ), "label": data.get("label", "Emergency"), "pri": "alpha", "cluster": data.get("cluster", "Durban Central"), "station": data.get("station", data.get("cluster", "Durban Central")), "name": data.get("name", ""), "mobile": data.get("mobile", ""), "address": data.get("address", ""), "named": bool(data.get("named")), "note": data.get("note", ""), "status": "waiting", "desk": "saps", "log": ["File opened."], "face": "/static/face.jpg" if data.get("named") else "", "at": time.time(), "crime": data.get("label", "Emergency"), "call": data.get("call", ""), "transcript": "", "kind": "case", "officer": ""}
                 REPORTS.insert(0, item)
             return self.send(200, json.dumps(item), "application/json")
         if path.startswith("/api/route/"):
