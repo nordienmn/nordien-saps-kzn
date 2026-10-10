@@ -25,7 +25,9 @@
   .live { position: absolute; top: 8px; left: 8px; background: #8f1d24; color: #fff; font-size: 12px; padding: 3px 6px; }
   button, select { font-family: inherit; }
   .answer { width: 100%; margin-top: 8px; border: 0; background: #1e4f9a; color: #fff; padding: 12px; font-weight: 700; }
-  .transcript { background: #121c30; padding: 8px; margin-top: 8px; font-size: 14px; }
+  .zones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .zone { border: 1px dashed #d4af37; border-radius: 8px; min-height: 54px; display: grid; place-items: center; color: #d4af37; font-size: 13px; font-weight: 700; }
+  .zone.over { background: rgba(212,175,55,.15); }
   @media (max-width: 800px) { .body { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -49,10 +51,13 @@
   </div>
 </div>
 <div class="body">
-  <section>
-    <p class="label">Files</p>
-    <div id="board"></div>
-  </section>
+  <p class="label">Move this file</p>
+    <div class="zones">
+      <div class="zone" data-desk="flying">Flying Squad</div>
+      <div class="zone" data-desk="station">Station</div>
+      <div class="zone" data-desk="fcs">FCS</div>
+      <div class="zone" data-desk="hold">Hold</div>
+    </div>
   <section>
     <p class="label">Case file</p>
     <div id="docket"></div>
@@ -81,6 +86,8 @@ async function load() {
     const el = document.createElement("div");
     el.className = "card" + (selected === c.id ? " on" : "");
     el.innerHTML = `<div class="cas">${c.cas}</div><h3>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label}</h3><div class="fine">${c.cluster} · ${c.named ? c.name : "no name"} · ${c.call || (c.kind === "tip" ? "tip" : "file")}</div>`;
+    el.draggable = true;
+    el.ondragstart = ev => ev.dataTransfer.setData("id", c.id);
     el.onclick = () => { selected = c.id; render(); };
     board.appendChild(el);
   });
@@ -96,9 +103,9 @@ function render() {
     <h3>${c.label}</h3>
     <div class="caller"><img src="${c.face || "/static/face.jpg"}" alt="" /><div><b>${c.named ? c.name : "Name not stored"}</b><br>${c.mobile || "No callback"}<br>${c.address || c.cluster}</div></div>
     <p class="fine">${c.note || ""}</p>
-    <div class="window" id="win">${live ? '<span class="live">LIVE CALL</span><img src="/static/face.jpg" alt="Caller on the line" />' : "No live call on this file."}</div>
+    <div class="window" id="win">${live ? '<span class="live">LIVE CALL</span><img src="/static/face.jpg" alt="Control room and caller" /><div class="fine" style="position:absolute;bottom:8px;left:8px;right:8px;background:rgba(0,0,0,.6);padding:6px">Recording. Transcript writing into this file.</div>' : "No live call on this file."}</div>
     ${live ? '<button class="answer" onclick="answer()">Receive call on this file</button>' : ""}
-    <div class="transcript"><b>Transcript</b><br>${c.transcript || "Waiting for the citizen to speak."}</div>
+    <div class="transcript"><b>Transcript on file</b><br>${c.transcript || "Waiting for the citizen to speak."}</div>
     <p class="fine">${(c.log || []).join("<br>")}</p>
     ${seat === "tipoff" ? '<button class="answer" onclick="escalate(\'headoffice\')">Escalate to head office</button><button class="answer" onclick="escalate(\'commissioner\')">Escalate to commissioner</button>' : ""}
     ${seat === "gbv" ? '<button class="answer" onclick="refer(\'hospital\')">Refer to hospital</button><button class="answer" onclick="refer(\'social worker\')">Refer to social worker</button><button class="answer" onclick="refer(\'rape kit and testing\')">Rape kit and testing</button><button class="answer" onclick="refer(\'shelter\')">Shelter</button><button class="answer" onclick="refer(\'transport\')">Transport</button>' : ""}`;
@@ -117,6 +124,17 @@ async function answer() {
   win.innerHTML = '<span class="live">RECEIVED</span><img src="/static/face.jpg" alt="Caller" />';
   load();
 }
+document.querySelectorAll(".zone").forEach(z => {
+  z.ondragover = ev => { ev.preventDefault(); z.classList.add("over"); };
+  z.ondragleave = () => z.classList.remove("over");
+  z.ondrop = async ev => {
+    ev.preventDefault(); z.classList.remove("over");
+    const id = ev.dataTransfer.getData("id") || selected;
+    if (!id) return;
+    await fetch("/api/route/" + id, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ desk: z.dataset.desk, officer, log: officer + " moved the file to " + z.dataset.desk + "." }) });
+    load();
+  };
+});
 load();
 setInterval(load, 2000);
 </script>

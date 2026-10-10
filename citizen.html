@@ -39,8 +39,21 @@
   .loc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .shot { border: 1px solid #d5dde6; background: #fff; color: var(--navy); border-radius: 12px; padding: 12px; font-weight: 700; }
   .face { width: 96px; height: 96px; border-radius: 48px; object-fit: cover; display: block; margin: 8px auto; background: #e8eef5; }
-  .call { display: none; margin-top: 12px; }
+  .call { display: none; }
   video { width: 100%; border-radius: 14px; background: #000; }
+  .stage { position: fixed; inset: 0; z-index: 30; background: #061a3a; color: #fff; display: none; flex-direction: column; }
+  .stage.on { display: flex; }
+  .stage-top { padding: 48px 18px 8px; text-align: center; }
+  .stage-top b { display: block; font-size: 22px; }
+  .stage-top span { color: #d7e2f2; font-size: 14px; }
+  .stage-view { flex: 1; margin: 8px 16px; border-radius: 18px; overflow: hidden; background: #000; position: relative; }
+  .stage-view img, .stage-view video { width: 100%; height: 100%; object-fit: cover; }
+  .self { position: absolute; right: 12px; bottom: 12px; width: 96px; height: 128px; border-radius: 12px; object-fit: cover; border: 2px solid #fff; background: #111; }
+  .live-pill { position: absolute; left: 12px; top: 12px; background: #c8102e; color: #fff; font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: 999px; }
+  .said { padding: 0 18px 8px; min-height: 40px; color: #e8eef8; font-size: 14px; }
+  .pad-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 8px 18px 28px; }
+  .pad-btns button { border: 0; border-radius: 40px; height: 64px; font-weight: 800; color: #fff; background: rgba(255,255,255,.16); }
+  .pad-btns .end { background: #c8102e; }
   .ack { display: none; margin-top: 12px; color: #1b7a3a; font-size: 15px; font-weight: 600; }
   .gate { position: fixed; inset: 0; background: rgba(6,26,58,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
   .sheet { background: #fff; width: min(430px, 100%); border-radius: 20px 20px 0 0; padding: 22px 18px 28px; border-top: 5px solid var(--gold); }
@@ -138,7 +151,21 @@
       <button class="go" type="button" onclick="saveProfile()">Save profile</button>
     </div>
 
-    <div class="call" id="call"><video id="preview" autoplay muted playsinline></video></div>
+    <div class="stage" id="stage">
+  <div class="stage-top"><b id="stage-title">Calling 10111</b><span id="stage-sub">SAPS KZN control room</span></div>
+  <div class="stage-view">
+    <span class="live-pill">LIVE</span>
+    <img id="operator" alt="Control room" src="/static/face.jpg" />
+    <video id="self" class="self" autoplay muted playsinline></video>
+  </div>
+  <div class="said" id="said">Connecting to the desk…</div>
+  <div class="pad-btns">
+    <button type="button" onclick="toggleMute()" id="btn-mute">Mute</button>
+    <button type="button" onclick="toggleCam()" id="btn-cam">Camera</button>
+    <button type="button" onclick="toggleSpeaker()" id="btn-spk">Speaker</button>
+    <button class="end" type="button" onclick="endCall()">End</button>
+  </div>
+</div>
     <div class="ack" id="ack"></div>
   </div>
 </div>
@@ -256,19 +283,56 @@ function openEmergency() {
   const p = profile();
   document.getElementById("em-who").textContent = p ? "Operator will see " + p.name + " · " + p.mobile : "No profile. The call still goes through.";
 }
-async function callNow() {
+let callId = "", muted = false, camOn = true, speaker = true, recTimer = null;
+const DEMO_LINES = [
+  "Citizen: I need help now.",
+  "Operator: SAPS KZN. I can see your location. Stay on the line.",
+  "Citizen: Two men at the gate. I cannot speak freely.",
+  "Operator: Stay inside. A unit is being advised."
+];
+async function startCall(kind) {
   const p = profile();
-  ack("Calling 10111. This goes to the SAPS KZN desk, not the national centre.");
+  document.getElementById("stage").classList.add("on");
+  document.getElementById("stage-title").textContent = kind === "video" ? "Video call · 10111" : "Calling 10111";
+  document.getElementById("said").textContent = "Connecting to the SAPS KZN desk…";
   try {
-    await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Voice call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: "Citizen pressed Call. Routed to the SAPS KZN desk." }) });
-  } catch (e) {}
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === "video" });
+    const self = document.getElementById("self");
+    self.srcObject = stream;
+    self.style.display = kind === "video" ? "block" : "none";
+    await self.play();
+  } catch (e) {
+    document.getElementById("self").style.display = "none";
+  }
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    label: kind === "video" ? "Video call" : "Voice call",
+    name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "",
+    named: !!p, call: "incoming",
+    note: "Live " + kind + " to the SAPS KZN desk. Not the national 10111 centre."
+  }) })).json();
+  callId = item.id;
+  document.getElementById("stage-sub").textContent = item.cas + " · control room";
+  let i = 0;
+  clearInterval(recTimer);
+  recTimer = setInterval(async () => {
+    if (i >= DEMO_LINES.length) return clearInterval(recTimer);
+    const line = DEMO_LINES[i++];
+    document.getElementById("said").textContent = line;
+    await fetch("/api/route/" + callId, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ call: "live", transcript: DEMO_LINES.slice(0, i).join(" "), log: "Recorded: " + line }) });
+  }, 2500);
 }
-async function videoCall() {
-  const p = profile();
-  document.getElementById("call").style.display = "block";
-  try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); const preview = document.getElementById("preview"); preview.srcObject = stream; await preview.play(); } catch (e) {}
-  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Video call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: p ? "Profile on the call." : "No profile." }) })).json();
-  ack(item.cas + " on the desk.");
+async function callNow() { startCall("voice"); }
+async function videoCall() { startCall("video"); }
+function toggleMute() { muted = !muted; document.getElementById("btn-mute").textContent = muted ? "Unmute" : "Mute"; }
+function toggleCam() { camOn = !camOn; document.getElementById("self").style.display = camOn ? "block" : "none"; document.getElementById("btn-cam").textContent = camOn ? "Camera" : "Cam off"; }
+function toggleSpeaker() { speaker = !speaker; document.getElementById("btn-spk").textContent = speaker ? "Speaker" : "Earpiece"; }
+async function endCall() {
+  clearInterval(recTimer);
+  if (callId) await fetch("/api/route/" + callId, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ call: "ended", log: "Call ended. Recording and transcript are on the file." }) });
+  const self = document.getElementById("self");
+  if (self.srcObject) self.srcObject.getTracks().forEach(t => t.stop());
+  document.getElementById("stage").classList.remove("on");
+  ack("Call ended. It is on the desk, with the transcript.");
 }
 async function sendGbv() {
   const note = ["Help: " + document.getElementById("gbv-help").value, "Social worker: " + document.getElementById("gbv-sw").value, "Hospital: " + document.getElementById("gbv-hosp").value, "Can identify: " + document.getElementById("gbv-id").value, "Details: " + document.getElementById("gbv-who").value, "Call now: " + document.getElementById("gbv-call").value, "Transport: " + document.getElementById("gbv-ride").value].join(". ");
