@@ -40,24 +40,28 @@
   <div><a href="/headoffice">Head office</a><a href="/commissioner">Commissioner</a></div>
 </header>
 <div class="gate" id="gate" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
-  <div style="background:#fff;color:#1c1c1e;border-radius:16px;padding:20px;width:min(360px,92%)">
-    <b>Sign in</b>
-    <p>Choose your seat. Your ID is tagged to what you take.</p>
+  <div style="background:#fff;color:#1c1c1e;border-radius:16px;padding:20px;width:min(380px,92%)">
+    <b>Desk sign in</b>
+    <p>Four doors. Password for the demo is 0000.</p>
     <select id="seat" style="width:100%;padding:12px;margin:8px 0">
-      <option value="operator">Operator</option>
-      <option value="callcenter">Call center 1</option>
-      <option value="tipoff">Tip-off line</option>
+      <option value="calls">Call operators</option>
+      <option value="crime">Crime reporting</option>
       <option value="gbv">GBV</option>
+      <option value="anon">Anonymous</option>
     </select>
-    <input id="op" value="OP-12" style="width:100%;padding:12px;margin:8px 0" />
-    <button type="button" onclick="enter()" style="width:100%;padding:12px">Enter shift</button>
+    <input id="op" placeholder="Officer ID" value="OP-12" style="width:100%;padding:12px;margin:8px 0" />
+    <input id="pw" type="password" placeholder="Password" value="0000" style="width:100%;padding:12px;margin:8px 0" />
+    <button type="button" onclick="enter()" style="width:100%;padding:12px">Enter</button>
+    <p id="bad" style="color:#c8102e;display:none">Password is 0000.</p>
   </div>
 </div>
 <div class="body">
   <section>
     <div class="tabs">
-      <button type="button" id="tab-files" class="on" onclick="setTab('files')">Files</button>
+      <button type="button" id="tab-calls" class="on" onclick="setTab('calls')">Call operators</button>
+      <button type="button" id="tab-crime" onclick="setTab('crime')">Crime reporting</button>
       <button type="button" id="tab-gbv" onclick="setTab('gbv')">GBV</button>
+      <button type="button" id="tab-anon" onclick="setTab('anon')">Anonymous</button>
       <button type="button" id="tab-infra" onclick="setTab('infra')">Unsafe infrastructure</button>
     </div>
     <div id="board"></div>
@@ -75,29 +79,32 @@
   </section>
 </div>
 <script>
-let reports = [], allReports = [], selected = null, officer = "", seat = "operator", tab = "files";
+let reports = [], allReports = [], selected = null, officer = "", seat = "calls", tab = "calls";
 function setTab(next) {
   tab = next;
-  ["files", "gbv", "infra"].forEach(name => document.getElementById("tab-" + name).classList.toggle("on", name === tab));
+  ["calls", "crime", "gbv", "anon", "infra"].forEach(name => document.getElementById("tab-" + name).classList.toggle("on", name === tab));
   selected = null;
   load();
 }
 function enter() {
+  if (document.getElementById("pw").value !== "0000") {
+    document.getElementById("bad").style.display = "block";
+    return;
+  }
   seat = document.getElementById("seat").value;
   officer = document.getElementById("op").value.trim() || "OP-12";
   document.getElementById("gate").style.display = "none";
-  const names = { operator: "Operator", callcenter: "Call center 1", tipoff: "Tip-off line", gbv: "GBV" };
+  const names = { calls: "Call operators", crime: "Crime reporting", gbv: "GBV", anon: "Anonymous" };
   document.getElementById("shift").textContent = names[seat] + " · " + officer;
-  if (seat === "gbv") setTab("gbv");
-  else if (seat === "tipoff") { tab = "files"; load(); }
-  else load();
+  setTab(seat);
 }
 async function load() {
   allReports = await (await fetch("/api/reports")).json();
-  if (seat === "tipoff") reports = allReports.filter(c => c.kind === "tip");
+  if (tab === "anon") reports = allReports.filter(c => c.kind === "tip");
   else if (tab === "gbv") reports = allReports.filter(c => c.label === "GBV" || c.label === "GBV SOS");
   else if (tab === "infra") reports = allReports.filter(c => c.kind === "area");
-  else reports = allReports.filter(c => c.kind !== "tip" && c.kind !== "area" && c.label !== "GBV" && c.label !== "GBV SOS");
+  else if (tab === "calls") reports = allReports.filter(c => c.label === "Voice call" || c.label === "Video call" || c.call);
+  else reports = allReports.filter(c => c.kind !== "tip" && c.kind !== "area" && c.label !== "GBV" && c.label !== "GBV SOS" && c.label !== "Voice call" && c.label !== "Video call");
   const board = document.getElementById("board");
   board.innerHTML = "";
   if (!reports.length) board.innerHTML = "<p class='fine'>Nothing in this section.</p>";
@@ -126,8 +133,8 @@ function render() {
     ${live ? '<button class="answer" onclick="answer()">Receive call on this file</button>' : ""}
     <div class="transcript"><b>Transcript on file</b><br>${c.transcript || "Waiting for the citizen to speak."}</div>
     <p class="fine">${(c.log || []).join("<br>")}</p>
-    ${seat === "tipoff" ? '<button class="answer" onclick="escalate(\'headoffice\')">Escalate to head office</button><button class="answer" onclick="escalate(\'commissioner\')">Escalate to commissioner</button>' : ""}
-    ${seat === "gbv" ? '<button class="answer" onclick="refer(\'hospital\')">Refer to hospital</button><button class="answer" onclick="refer(\'social worker\')">Refer to social worker</button><button class="answer" onclick="refer(\'rape kit and testing\')">Rape kit and testing</button><button class="answer" onclick="refer(\'shelter\')">Shelter</button><button class="answer" onclick="refer(\'transport\')">Transport</button>' : ""}`;
+    ${seat === "anon" || tab === "anon" ? '<button class="answer" onclick="escalate(\'commissioner\')">Escalate to senior leadership</button>' : ""}
+    ${tab === "gbv" ? '<button class="answer" onclick="refer(\'hospital\')">Refer to hospital</button><button class="answer" onclick="refer(\'social worker\')">Refer to social worker</button><button class="answer" onclick="refer(\'rape kit and testing\')">Rape kit and testing</button><button class="answer" onclick="refer(\'shelter\')">Shelter</button><button class="answer" onclick="refer(\'transport\')">Transport</button>' : ""}`;
 }
 async function refer(where) {
   await fetch("/api/route/" + selected, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ officer, log: officer + " referred to " + where + "." }) });
