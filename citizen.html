@@ -257,13 +257,11 @@ function openEmergency() {
   document.getElementById("em-who").textContent = p ? "Operator will see " + p.name + " · " + p.mobile : "No profile. The call still goes through.";
 }
 async function callNow() {
-  const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   const p = profile();
-  ack(phone ? "Opening 10111 on this phone." : "Call placed to 10111. The desk can see it.");
+  ack("Calling 10111. This goes to the SAPS KZN desk, not the national centre.");
   try {
-    await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Voice call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: "Citizen pressed Call." }) });
+    await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Voice call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: "Citizen pressed Call. Routed to the SAPS KZN desk." }) });
   } catch (e) {}
-  if (phone) window.location.href = "tel:10111";
 }
 async function videoCall() {
   const p = profile();
