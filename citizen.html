@@ -18,8 +18,12 @@
   .langs button { border: 1px solid rgba(255,255,255,.35); background: transparent; color: #fff; border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; }
   .langs button.on { background: var(--gold); color: var(--navy); border-color: var(--gold); }
   .pad { padding: 16px 16px 40px; }
-  .sos { width: 100%; border: 0; border-radius: 18px; background: var(--red); color: #fff; font-size: 22px; font-weight: 800; padding: 26px 16px; }
-  .sos small { display: block; font-size: 14px; font-weight: 500; opacity: .9; margin-top: 6px; }
+  .sos { width: 100%; border: 0; border-radius: 18px; background: var(--red); color: #fff; padding: 0; overflow: hidden; }
+  .sos-head { padding: 18px 16px 10px; font-size: 22px; font-weight: 800; text-align: center; }
+  .sos-head small { display: block; font-size: 13px; font-weight: 500; opacity: .9; margin-top: 4px; }
+  .sos-split { display: grid; grid-template-columns: 1fr 1fr; }
+  .sos-split button { border: 0; background: transparent; color: #fff; font-size: 17px; font-weight: 800; padding: 16px 8px 18px; }
+  .sos-split button + button { border-left: 1px solid rgba(255,255,255,.35); }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
   .tile, .plain { border: 0; border-radius: 16px; padding: 18px 12px; font-size: 16px; font-weight: 700; }
   .tile { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(10,47,107,.08); }
@@ -52,13 +56,14 @@
     </div>
   </div>
   <div class="pad">
-    <button class="sos" type="button" onclick="openEmergency()"><span id="t-sos">Emergency</span><small id="t-sos-sub">Call 10111, or open a video call</small></button>
-    <div class="panel" id="emergency">
-      <button class="back" type="button" onclick="back()">← <span data-k="back">Back</span></button>
-      <p class="who" id="em-who">No profile. The operator will not have your name.</p>
-      <button class="go" type="button" onclick="callNow()" style="background:#c8102e" id="t-call">Call now</button>
-      <button class="go" type="button" onclick="videoCall()" id="t-video">Video call</button>
+    <div class="sos">
+      <div class="sos-head"><span id="t-sos">Emergency</span><small id="t-sos-sub">Call 10111, or open a video call</small></div>
+      <div class="sos-split">
+        <button type="button" onclick="callNow()" id="t-call">Call</button>
+        <button type="button" onclick="videoCall()" id="t-video">Video call</button>
+      </div>
     </div>
+    <p class="who" id="em-who" style="margin-top:10px">No profile. The call still goes through.</p>
     <div class="row">
       <button class="tile" type="button" onclick="openPanel('crime')" id="t-crime">Report a crime</button>
       <button class="tile" type="button" onclick="openPanel('gbv')" id="t-gbv">GBV help</button>
@@ -150,7 +155,7 @@ const T = {
     sos: "Emergency", sosSub: "Call 10111, or open a video call",
     crime: "Report a crime", gbv: "GBV help", anon: "Report anonymously",
     area: "Report an unsafe area", profile: "Create a profile",
-    call: "Call now", video: "Video call", send: "Send report", tip: "Send tip", help: "Send for help",
+    call: "Call", video: "Video call", send: "Send report", tip: "Send tip", help: "Send for help",
     gate: "Before you use this",
     gate1: "This notice is under the Protection of Personal Information Act. What you send is received by the South African Police Service.",
     gate2: "Once submitted, that content is owned by the police. It may be used as evidence if needed.",
@@ -161,7 +166,7 @@ const T = {
     sos: "Isimo esiphuthumayo", sosSub: "Shayela u-10111, noma uvule ucingo lwevidiyo",
     crime: "Bika ubugebengu", gbv: "Usizo lwe-GBV", anon: "Bika ungaziwa",
     area: "Bika indawo engaphephile", profile: "Dala iphrofayela",
-    call: "Shayela manje", video: "Ucingo lwevidiyo", send: "Thumela umbiko", tip: "Thumela ithiphu", help: "Thumela usizo",
+    call: "Shayela", video: "Ucingo lwevidiyo", send: "Thumela umbiko", tip: "Thumela ithiphu", help: "Thumela usizo",
     gate: "Ngaphambi kokusebenzisa lokhu",
     gate1: "Lesi saziso singaphansi koMthetho Wokuvikelwa Kolwazi Lomuntu Siqu. Okuthumelayo kutholwa ngamaphoyisa.",
     gate2: "Uma sekuthunyelwe, okuqukethwe kungokwamaphoyisa. Kungasetshenziswa njengobufakazi uma kudingeka.",
@@ -236,7 +241,6 @@ function saveProfile() {
 }
 function ack(text) { const el = document.getElementById("ack"); el.style.display = "block"; el.textContent = text; }
 function openEmergency() {
-  openPanel("emergency");
   const p = profile();
   document.getElementById("em-who").textContent = p ? "Operator will see " + p.name + " · " + p.mobile : "No profile. The call still goes through.";
 }
@@ -273,6 +277,7 @@ function accept() {
 if (localStorage.getItem("saps-popia") === "yes") document.getElementById("gate").style.display = "none";
 setLang(lang);
 paint();
+openEmergency();
 </script>
 </body>
 </html>
