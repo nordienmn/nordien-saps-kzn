@@ -30,6 +30,10 @@
   <div class="kpi"><b id="tips">0</b><span>Anonymous</span></div>
   <div class="kpi"><b id="red">0</b><span>Referred up</span></div>
 </div>
+<h2>Unsafe infrastructure</h2>
+<div id="infra"></div>
+<h2>GBV</h2>
+<div id="gbv"></div>
 <h2>Anonymous tips</h2>
 <div id="tips"></div>
 <h2>All files</h2>
@@ -45,7 +49,15 @@ async function load() {
   document.getElementById("red").textContent = referred.length;
   document.getElementById("tips").innerHTML = tips.length
     ? tips.map(c => `<div class="${c.desk === "commissioner" || c.status === "referred" ? "flash" : "card"}"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.address || "place not given"} · ${c.verified ? "verified" : "not acted on"} · ${c.desk || "tip-off"}</div></div>`).join("")
-    : `<div class="card"><div class="fine">No anonymous tips yet. They appear here when a citizen uses Report anonymously.</div></div>`;
+    : `<div class="card"><div class="fine">No anonymous tips yet.</div></div>`;
+  const infra = reports.filter(c => c.kind === "area");
+  document.getElementById("infra").innerHTML = infra.length
+    ? infra.map(c => `<div class="card"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.address || "place not given"} · share with municipality</div></div>`).join("")
+    : `<div class="card"><div class="fine">No unsafe infrastructure reports.</div></div>`;
+  const gbv = reports.filter(c => c.label === "GBV" || c.label === "GBV SOS");
+  document.getElementById("gbv").innerHTML = gbv.length
+    ? gbv.map(c => `<div class="card"><div class="cas">${c.cas}</div><b>${c.label}</b><div class="fine">${c.note || ""}</div></div>`).join("")
+    : `<div class="card"><div class="fine">No GBV files.</div></div>`;
   document.getElementById("list").innerHTML = reports.map(c => `<div class="card"><div class="cas">${c.cas}</div>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label} · ${c.cluster || ""} · ${c.officer || "no officer yet"}</div>`).join("");
 }
 load();

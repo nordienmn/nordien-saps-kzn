@@ -84,7 +84,7 @@
       <button class="tile tip" type="button" onclick="openPanel('gbv')" id="t-gbv" data-tip="Help for gender-based violence. Social worker, hospital, a call, or transport.">GBV help</button>
     </div>
     <button class="plain tip" type="button" onclick="openPanel('anon')" id="t-anon" data-tip="A tip, not a case. No name is stored.">Report anonymously</button>
-    <button class="plain" type="button" onclick="openPanel('area')" id="t-area">Report an unsafe area</button>
+    <button class="plain" type="button" onclick="openPanel('area')" id="t-area">Unsafe infrastructure</button>
     <button class="plain tip" type="button" onclick="openPanel('profile')" id="t-profile" data-tip="Take a photo now. Your name, number and address then fill in on reports and calls.">Create a profile</button>
 
     <div class="panel" id="crime">
@@ -128,7 +128,7 @@
       <button class="back" type="button" onclick="back()">← <span data-k="back">Back</span></button>
       <p class="who">Not a crime. Police can share this with the municipality.</p>
       <label>What is unsafe</label>
-      <select id="area-type"><option>Dark street</option><option>Open ditch</option><option>Veld</option><option>Broken light</option><option>Overgrown path</option></select>
+      <select id="area-type"><option>Dark street</option><option>Broken light</option><option>Open ditch</option><option>Veld</option><option>Overgrown path</option><option>Vagrants</option><option>Unsafe building</option><option>Park</option><option>Taxi rank</option><option>School grounds</option></select>
       <label data-k="place">Place</label>
       <div class="loc">
         <button type="button" class="shot" onclick="here('area-where','area-pin')">Current location</button>
@@ -185,7 +185,7 @@ const T = {
     crime: "Report a crime", crimeTip: "A written report. You can add time, place, a description, and a photo or video.",
     gbv: "GBV help", gbvTip: "Help for gender-based violence. Social worker, hospital, a call, or transport.",
     anon: "Report anonymously", anonTip: "A tip, not a case. No name is stored.",
-    area: "Report an unsafe area", profile: "Create a profile",
+    area: "Unsafe infrastructure", profile: "Create a profile",
     profileTip: "Take a photo now. Your name, number and address then fill in on reports and calls.",
     call: "Call", video: "Video call", send: "Send report", tip: "Send tip", help: "Send for help",
     gate: "Before you use this",
@@ -345,7 +345,7 @@ async function reportCrime() {
   ack(item.cas + " sent.");
 }
 async function reportArea() {
-  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "area", label: document.getElementById("area-type").value, address: document.getElementById("area-where").value, named: false, note: "Unsafe area. For the municipality." }) })).json();
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "area", label: document.getElementById("area-type").value, address: document.getElementById("area-where").value, named: false, note: "Unsafe infrastructure. Dark street, building, park, vagrants, or similar. For the municipality." }) })).json();
   ack(item.cas + " sent.");
 }
 async function reportAnon() {

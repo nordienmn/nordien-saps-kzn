@@ -11,7 +11,10 @@
   .brand img { width: 46px; height: 46px; background: #fff; border-radius: 50%; }
   .brand b { letter-spacing: .08em; font-size: 13px; } .brand span, a { color: #93a4bd; font-size: 12px; }
   a { margin-left: 12px; color: #d4af37; }
-  .body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 16px 24px; }
+  .body { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; padding: 12px 16px 24px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button { border: 1px solid rgba(212,175,55,.5); background: #121c30; color: #e8eef8; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-weight: 700; }
+  .tabs button.on { background: #d4af37; color: #0a1730; }
   .label { color: #d4af37; letter-spacing: .12em; font-size: 11px; text-transform: uppercase; }
   .card { background: #121c30; border: 1px solid rgba(255,255,255,.1); padding: 10px; margin: 8px 0; cursor: pointer; }
   .card.on { border-color: #d4af37; }
@@ -51,41 +54,57 @@
   </div>
 </div>
 <div class="body">
-  <p class="label">Move this file</p>
+  <section>
+    <div class="tabs">
+      <button type="button" id="tab-files" class="on" onclick="setTab('files')">Files</button>
+      <button type="button" id="tab-gbv" onclick="setTab('gbv')">GBV</button>
+      <button type="button" id="tab-infra" onclick="setTab('infra')">Unsafe infrastructure</button>
+    </div>
+    <div id="board"></div>
+    <p class="label">Move this file</p>
     <div class="zones">
       <div class="zone" data-desk="flying">Flying Squad</div>
       <div class="zone" data-desk="station">Station</div>
       <div class="zone" data-desk="fcs">FCS</div>
       <div class="zone" data-desk="hold">Hold</div>
     </div>
+  </section>
   <section>
     <p class="label">Case file</p>
     <div id="docket"></div>
   </section>
 </div>
 <script>
-let reports = [], selected = null, officer = "", seat = "operator";
+let reports = [], allReports = [], selected = null, officer = "", seat = "operator", tab = "files";
+function setTab(next) {
+  tab = next;
+  ["files", "gbv", "infra"].forEach(name => document.getElementById("tab-" + name).classList.toggle("on", name === tab));
+  selected = null;
+  load();
+}
 function enter() {
   seat = document.getElementById("seat").value;
   officer = document.getElementById("op").value.trim() || "OP-12";
   document.getElementById("gate").style.display = "none";
   const names = { operator: "Operator", callcenter: "Call center 1", tipoff: "Tip-off line", gbv: "GBV" };
   document.getElementById("shift").textContent = names[seat] + " · " + officer;
-  load();
+  if (seat === "gbv") setTab("gbv");
+  else if (seat === "tipoff") { tab = "files"; load(); }
+  else load();
 }
 async function load() {
-  const all = await (await fetch("/api/reports")).json();
-  reports = all.filter(c => {
-    if (seat === "tipoff") return c.kind === "tip";
-    if (seat === "gbv") return c.label === "GBV" || c.label === "GBV SOS";
-    return c.kind !== "tip" && c.kind !== "area" && c.label !== "GBV" && c.label !== "GBV SOS";
-  });
+  allReports = await (await fetch("/api/reports")).json();
+  if (seat === "tipoff") reports = allReports.filter(c => c.kind === "tip");
+  else if (tab === "gbv") reports = allReports.filter(c => c.label === "GBV" || c.label === "GBV SOS");
+  else if (tab === "infra") reports = allReports.filter(c => c.kind === "area");
+  else reports = allReports.filter(c => c.kind !== "tip" && c.kind !== "area" && c.label !== "GBV" && c.label !== "GBV SOS");
   const board = document.getElementById("board");
   board.innerHTML = "";
+  if (!reports.length) board.innerHTML = "<p class='fine'>Nothing in this section.</p>";
   reports.forEach(c => {
     const el = document.createElement("div");
     el.className = "card" + (selected === c.id ? " on" : "");
-    el.innerHTML = `<div class="cas">${c.cas}</div><h3>${c.kind === "tip" ? "TIP" : "FILE"} · ${c.label}</h3><div class="fine">${c.cluster} · ${c.named ? c.name : "no name"} · ${c.call || (c.kind === "tip" ? "tip" : "file")}</div>`;
+    el.innerHTML = `<div class="cas">${c.cas}</div><h3>${c.kind === "tip" ? "TIP" : c.kind === "area" ? "INFRA" : "FILE"} · ${c.label}</h3><div class="fine">${c.cluster || ""} · ${c.named ? c.name : "no name"} · ${c.call || c.kind}</div>`;
     el.draggable = true;
     el.ondragstart = ev => ev.dataTransfer.setData("id", c.id);
     el.onclick = () => { selected = c.id; render(); };
