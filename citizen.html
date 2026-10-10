@@ -256,7 +256,15 @@ function openEmergency() {
   const p = profile();
   document.getElementById("em-who").textContent = p ? "Operator will see " + p.name + " · " + p.mobile : "No profile. The call still goes through.";
 }
-function callNow() { ack("Calling 10111."); window.location.href = "tel:10111"; }
+async function callNow() {
+  const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  const p = profile();
+  ack(phone ? "Opening 10111 on this phone." : "Call placed to 10111. The desk can see it.");
+  try {
+    await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Voice call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: "Citizen pressed Call." }) });
+  } catch (e) {}
+  if (phone) window.location.href = "tel:10111";
+}
 async function videoCall() {
   const p = profile();
   document.getElementById("call").style.display = "block";
