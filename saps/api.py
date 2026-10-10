@@ -1,0 +1,328 @@
+"""JSON API. Citizens use /api/c/*; officers use /api/auth/* and /api/staff/*."""
+from flask import Blueprint, current_app, jsonify, request, session
+
+from . import geo, security, service, taxonomy, telephony
+from .config import Config
+
+bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+def store():
+    return current_app.extensions["store"]
+
+
+@bp.errorhandler(service.Invalid)
+def invalid(exc):
+    return jsonify({"error": exc.message, "field": exc.field}), 422
+
+
+@bp.before_request
+def guard():
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        if not security.same_origin_ok():
+            return jsonify({"error": "Blocked: request came from another site."}), 403
+        if not request.is_json:
+            return jsonify({"error": "Send JSON."}), 415
+    return None
+
+
+def body():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise service.Invalid("That request could not be read.")
+    return data
+
+
+# ============================================================================ citizen
+@bp.get("/c/config")
+def citizen_config():
+    return jsonify({
+        "demo": True,
+        "video": Config.video_enabled(),
+        "whatsapp": {"enabled": Config.whatsapp_enabled(), "display": Config.WHATSAPP_DISPLAY, "join_hint": Config.WHATSAPP_JOIN_HINT},
+        "crime_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.CRIME_TYPES.items() if not v[3]],
+        "tip_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.TIP_TYPES.items()],
+        "area_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.AREA_TYPES.items()],
+        "clusters": geo.cluster_options(),
+    })
+
+
+@bp.post("/c/report")
+def citizen_report():
+    data = body()
+    kind = data.get("kind")
+    s = store()
+    if kind == "tip":
+        tip, code = service.create_tip(s, data)
+        return jsonify({"ok": True, "ref": tip["ref"], "code": code, "kind": "tip"})
+    if kind not in ("crime", "gbv", "sos", "area"):
+        raise service.Invalid("Unknown report type.", "kind")
+    case = service.create_case(s, data, channel="weather" if kind == "sos" else "app")
+    if kind == "sos" and case.get("friend"):
+        _alert_friend(case)
+    return jsonify({"ok": True, "ref": case["ref"], "id": case["id"], "kind": case["kind"], "located": case["lat"] is not None})
+
+
+def _alert_friend(case):
+    text = (
+        "SAPS KZN demo: a friend asked for help using a discreet alert. "
+        + (f"Their location: {telephony.map_link(case['lat'], case['lon'])}. " if case["lat"] is not None else "Their location was not shared. ")
+        + "If you think they are in danger call 10111."
+    )
+    telephony.send_whatsapp(case["friend"], text)
+
+
+@bp.post("/c/call/start")
+def call_start():
+    data = body()
+    case, ctoken = service.start_call(store(), data)
+    return jsonify({
+        "ok": True, "id": case["id"], "ref": case["ref"], "ctoken": ctoken,
+        "video": Config.video_enabled(), "mode": case["call"]["mode"],
+    })
+
+
+@bp.get("/c/call/<cid>/state")
+def call_state(cid):
+    return jsonify(service.citizen_call_state(store(), cid, request.args.get("t", "")))
+
+
+@bp.post("/c/call/<cid>/line")
+def call_line(cid):
+    data = body()
+    service.citizen_add_line(store(), cid, data.get("t"), data.get("text"), data.get("src", "typed"))
+    return jsonify({"ok": True})
+
+
+@bp.post("/c/call/<cid>/end")
+def call_end(cid):
+    service.citizen_end_call(store(), cid, body().get("t"))
+    return jsonify({"ok": True})
+
+
+@bp.post("/c/call/<cid>/token")
+def call_token(cid):
+    """A Twilio Video token for the citizen, only once the officer has answered and opened a room."""
+    data = body()
+    state = service.citizen_call_state(store(), cid, data.get("t"))
+    if not Config.video_enabled() or state["transport"] != "video" or state["state"] != "live":
+        raise service.Invalid("Video is not available for this call.")
+    return jsonify({"token": telephony.video_token(f"citizen-{cid}", state["room"]), "room": state["room"]})
+
+
+# ============================================================================ auth
+@bp.post("/auth/login")
+def login():
+    data = body()
+    role = data.get("role")
+    if role not in ("desk", "board"):
+        raise service.Invalid("Unknown login.")
+    ok = security.check_password(role, data.get("password"))
+    if ok is None:
+        return jsonify({"error": "This login is not switched on for this demo."}), 503
+    if not ok:
+        service.audit(store(), "unknown", role, "login.failed")
+        return jsonify({"error": "That password is not right."}), 401
+    officer = str(data.get("officer") or "").strip().upper()
+    if role == "desk" and not security.OFFICER_RE.match(officer):
+        raise service.Invalid("Enter your officer ID (letters, numbers, dash).", "officer")
+    if role == "board":
+        officer = officer if security.OFFICER_RE.match(officer) else "EXEC"
+    session.clear()
+    session.update({"role": role, "officer": officer})
+    session.permanent = False
+    service.audit(store(), officer, role, "login")
+    return jsonify({"ok": True, "role": role, "officer": officer})
+
+
+@bp.post("/auth/logout")
+def logout():
+    role, officer = security.current()
+    if role:
+        service.audit(store(), officer, role, "logout")
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@bp.get("/auth/me")
+def me():
+    role, officer = security.current()
+    return jsonify({
+        "role": role, "officer": officer,
+        "video": Config.video_enabled(), "whatsapp": Config.whatsapp_enabled(),
+        "login_desk": bool(Config.DESK_PASSWORD), "login_board": bool(Config.BOARD_PASSWORD),
+    })
+
+
+# ============================================================================ staff
+@bp.get("/staff/feed")
+@security.login_required("desk", "board")
+def staff_feed():
+    role, _ = security.current()
+    s = store()
+    since = request.args.get("since", type=int)
+    if since is not None and since == s.snapshot_version():
+        return jsonify({"unchanged": True, "version": since, "now": service.now()})
+    return jsonify(service.feed(s, role))
+
+
+@bp.get("/staff/case/<cid>")
+@security.login_required("desk")
+def staff_case(cid):
+    _, officer = security.current()
+    detail = service.case_detail(store(), cid, officer)
+    if detail is None:
+        return jsonify({"error": "Not found."}), 404
+    return jsonify(detail)
+
+
+@bp.get("/staff/tip/<tid>")
+@security.login_required("desk", "board")
+def staff_tip(tid):
+    role, officer = security.current()
+    detail = service.tip_detail(store(), tid, officer, role)
+    if detail is None:
+        return jsonify({"error": "Not found."}), 404
+    return jsonify(detail)
+
+
+@bp.get("/staff/tip-code/<code>")
+@security.login_required("desk")
+def tip_code(code):
+    tip = service.check_tip_code(store(), code)
+    if not tip:
+        return jsonify({"error": "No tip has that code."}), 404
+    return jsonify({"ref": tip["ref"], "status": tip["status"]})
+
+
+@bp.post("/staff/case/<cid>/action")
+@security.login_required("desk")
+def staff_action(cid):
+    _, officer = security.current()
+    case = service.act(store(), cid, officer, body())
+    return jsonify({"ok": True, "status": case["status"]})
+
+
+@bp.post("/staff/case/<cid>/line")
+@security.login_required("desk")
+def staff_line(cid):
+    _, officer = security.current()
+    data = body()
+    case = store().get("cases", cid)
+    if not case or not case.get("call") or case["call"]["state"] != "live":
+        raise service.Invalid("There is no live call on this file.")
+    service.add_line(store(), cid, "operator", data.get("text"), "caption" if data.get("src") == "caption" else "typed")
+    return jsonify({"ok": True})
+
+
+@bp.post("/staff/case/<cid>/answer")
+@security.login_required("desk")
+def staff_answer(cid):
+    _, officer = security.current()
+    data = body()
+    want_video = bool(data.get("video")) and Config.video_enabled()
+    case = store().get("cases", cid)
+    room = ""
+    transport = "text"
+    if want_video and case and case.get("call") and case["call"]["mode"] in ("voice", "video"):
+        room = telephony.room_name(cid)
+        if telephony.ensure_room(room):
+            transport = "video"
+        else:
+            room = ""
+    case = service.answer_call(store(), cid, officer, transport, room)
+    out = {"ok": True, "transport": transport, "room": room}
+    if transport == "video":
+        out["token"] = telephony.video_token(f"desk-{officer}", room)
+    return jsonify(out)
+
+
+@bp.post("/staff/case/<cid>/end")
+@security.login_required("desk")
+def staff_end(cid):
+    _, officer = security.current()
+    service.end_call(store(), cid, officer, "the officer")
+    return jsonify({"ok": True})
+
+
+@bp.post("/staff/case/<cid>/refer")
+@security.login_required("desk")
+def staff_refer(cid):
+    _, officer = security.current()
+    ref = service.create_referral(store(), cid, officer, body())
+    return jsonify({"ok": True, "referral": ref})
+
+
+@bp.post("/staff/referral/<rid>")
+@security.login_required("desk")
+def staff_referral(rid):
+    _, officer = security.current()
+    ref = service.update_referral(store(), rid, officer, body().get("status"))
+    return jsonify({"ok": True, "referral": ref})
+
+
+@bp.post("/staff/tip/<tid>/escalate")
+@security.login_required("desk")
+def staff_escalate(tid):
+    _, officer = security.current()
+    tip = service.escalate_tip(store(), tid, officer)
+    return jsonify({"ok": True, "status": tip["status"]})
+
+
+@bp.post("/staff/tip/<tid>/ack")
+@security.login_required("board")
+def staff_ack(tid):
+    _, officer = security.current()
+    tip = service.acknowledge_tip(store(), tid, officer or "EXEC")
+    return jsonify({"ok": True, "status": tip["status"]})
+
+
+@bp.get("/staff/partners")
+@security.login_required("desk")
+def staff_partners():
+    return jsonify({
+        "partners": sorted(store().all("partners"), key=lambda p: (p["type"], p["name"])),
+        "types": taxonomy.REFERRAL_TYPES,
+    })
+
+
+@bp.get("/staff/media/<mid>")
+@security.login_required("desk")
+def staff_media(mid):
+    _, officer = security.current()
+    m = store().get("media", mid)
+    if m is None:
+        return jsonify({"error": "Not found."}), 404
+    service.audit(store(), officer, "desk", "media.view", m["case_id"])
+    return jsonify({"data_url": m["data_url"]})
+
+
+@bp.get("/staff/audit")
+@security.login_required("board")
+def staff_audit():
+    rows = sorted(store().all("audit"), key=lambda a: -a["at"])[:200]
+    return jsonify({"audit": rows})
+
+
+@bp.get("/staff/partner/<pid>")
+@security.login_required("desk")
+def staff_partner_view(pid):
+    return jsonify({"items": service.partner_view(store(), pid)})
+
+
+@bp.post("/admin/reset")
+def admin_reset():
+    role, officer = security.current()
+    token = request.headers.get("X-Admin-Token", "")
+    import hmac
+
+    token_ok = bool(Config.ADMIN_TOKEN) and hmac.compare_digest(token, Config.ADMIN_TOKEN)
+    if not (token_ok or role == "board"):
+        return jsonify({"error": "Not allowed."}), 403
+    from .seed import seed
+
+    s = store()
+    s.clear()
+    seed(s)
+    service.audit(s, officer or "admin", role or "admin", "reset", "", "Demo data reset to the seed set.")
+    return jsonify({"ok": True})
