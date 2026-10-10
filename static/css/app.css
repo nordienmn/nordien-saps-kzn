@@ -305,3 +305,9 @@ body .feed__list { max-height: 17rem; }
   body, .canvas { background: #fff !important; color: #000 !important; }
   .card { border: 1px solid #999; box-shadow: none; background: #fff; color: #000; }
 }
+
+/* the file view never grows wider than the screen: no sideways scrolling */
+body .casefile { grid-template-columns: minmax(0, 1fr); }
+body .casefile > *, body .casefile__grid > *, body .casefile__col > * { min-width: 0; }
+body .desk__main { overflow-x: clip; }
+body .dock__quick { max-width: 100%; }
