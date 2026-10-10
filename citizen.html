@@ -283,10 +283,8 @@ async function reportAnon() {
   ack(item.cas + " sent as a tip.");
 }
 function accept() {
-  localStorage.setItem("saps-popia", "yes");
   document.getElementById("gate").style.display = "none";
 }
-if (localStorage.getItem("saps-popia") === "yes") document.getElementById("gate").style.display = "none";
 setLang(lang);
 paint();
 openEmergency();
