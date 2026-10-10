@@ -1,6 +1,6 @@
 # SAPS KZN demo: handover
 
-Built 2026-10-10 on branch `review/claude-2026-10-10`. Grok's original is tagged `grok-demo-v1` and is still in git history.
+Built 2026-10-10. One branch (`main`) holds the only version of the project.
 
 ## Addresses (all under `https://saps-kzn-420161470509.africa-south1.run.app`)
 
@@ -32,11 +32,7 @@ All passwords are `0000` (the owner's decision for a demo with no real data). Ot
 
 ## Rollback
 
-Each release is a Cloud Run revision. To go back to Grok's version, send traffic to revision `saps-kzn-00014-qlh`:
-
-```
-gcloud run services update-traffic saps-kzn --to-revisions saps-kzn-00014-qlh=100 --region africa-south1 --project nordien-saps-kzn
-```
+Each release is a Cloud Run revision, so the previous release can be restored in one command: `gcloud run services update-traffic saps-kzn --to-revisions <revision-name>=100 --region africa-south1 --project nordien-saps-kzn`. List revisions with `gcloud run revisions list --service saps-kzn --region africa-south1 --project nordien-saps-kzn`.
 
 ## Next steps (not blocking the demo)
 

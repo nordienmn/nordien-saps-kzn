@@ -2,7 +2,7 @@
 
 Citizen -> desk -> HQ demo for SAPS KwaZulu-Natal. The idea: the citizen app presents as **calling 10111** but the call is answered by our backend control-room desk, because the real 10111 line has long delays and many unanswered calls. **Demo only.** Calls and reports go to a demo desk. No real dispatch. A human stays in the loop. Seed records are synthetic and marked so.
 
-Repo: `https://github.com/nordienmn/nordien-saps-kzn` (private). Repo root is this folder. Grok's original build is tagged `grok-demo-v1`. The rebuild is on branch `review/claude-2026-10-10` until merged to `main`.
+Repo: `https://github.com/nordienmn/nordien-saps-kzn` (private). Repo root is this folder. One branch, `main`. This is the only version of the project (the earlier first build was deleted on the owner's instruction).
 
 @~/.claude/shared/shared-context.md
 
