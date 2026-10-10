@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block theme %}ops{% endblock %}
+{% block title %}SAPS KZN HQ operations board{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/board.css">{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-{{ name }}"/></svg>
+{%- endmacro %}
+
+{% block body %}
+<div id="login-view">
+  <div class="chrome"><div class="demo-banner" role="note"><span class="demo-banner__tag">Demo</span><span>Demonstration only. All figures are synthetic. No names, numbers or photos ever reach this board.</span></div></div>
+  <main id="main" class="login">
+    <div class="card login__card">
+      <div class="brand"><span class="brand__seal"><img src="/static/img/badge.png" alt=""></span><span><span class="brand__name">SAPS KZN</span><span class="brand__sub">HQ operations board</span></span></div>
+      <h1 class="login__title">Senior leadership</h1>
+      <p class="muted">The Provincial Commissioner and Head Office view of the whole process, from the first call to the last referral.</p>
+      <form class="stack stack--4" id="login-form" novalidate>
+        <div class="field"><label class="field__label" for="password">Board password</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
+        <p class="error-line" id="login-error" role="alert" hidden></p>
+        <button class="btn btn--primary btn--lg btn--block" type="submit" id="login-btn">Open the board</button>
+      </form>
+      <p class="muted text-sm"><a href="/desk">Control room desk</a></p>
+    </div>
+  </main>
+</div>
+
+<div id="board-view" hidden>
+  <a class="skip-link" href="#board">Skip to the board</a>
+  <div class="chrome" id="chrome">
+    <div class="demo-banner" role="note"><span class="demo-banner__tag">Demo</span><span>Demonstration only. All figures are synthetic. No names, numbers or photos ever reach this board.</span></div>
+    <header class="app-header app-header--ops">
+      <a class="brand" href="/commissioner" aria-label="SAPS KZN HQ operations board">
+        <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
+        <span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Provincial Commissioner &middot; HQ operations board</span></span>
+      </a>
+      <div class="app-header__actions">
+        <span class="live" role="status"><i aria-hidden="true"></i><span id="updated">Live</span></span>
+        <button type="button" class="btn btn--ghost" id="reset-demo" title="Put the demo back to its starting data">{{ icon('sliders') }}<span>Reset demo</span></button>
+        <button type="button" class="btn btn--ghost" id="logout">{{ icon('exit') }}<span>Sign out</span></button>
+      </div>
+    </header>
+  </div>
+
+  <section class="escalations" id="esc" aria-labelledby="esc-title">
+    <div class="escalations__label"><span class="escalations__title" id="esc-title">Needs HQ action</span><span class="escalations__hint" id="esc-hint" role="status" aria-live="polite"></span></div>
+    <ul class="escalations__list" id="esc-list"></ul>
+  </section>
+
+  <main class="board" id="board">
+    <section class="kpis" aria-label="Key figures" id="kpis"></section>
+    <div class="segmented tabs-bar" role="tablist" aria-label="Board sections" id="tabs">
+      <button type="button" class="segmented__btn" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="tips" aria-selected="false" tabindex="-1">Anonymous tips <span class="segmented__count segmented__count--alert" id="tab-tips-n">0</span></button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="deploy" aria-selected="false" tabindex="-1">Deployments</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="people" aria-selected="false" tabindex="-1">Crime and people</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="refs" aria-selected="false" tabindex="-1">Referrals and directions</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="perf" aria-selected="false" tabindex="-1">Performance</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="audit" aria-selected="false" tabindex="-1">Access log</button>
+      <button type="button" class="segmented__btn" role="tab" data-tab="brief" aria-selected="false" tabindex="-1">Daily brief</button>
+    </div>
+    <div id="panel" role="tabpanel" tabindex="-1"></div>
+  </main>
+</div>
+
+<dialog class="dialog" id="act-dlg" aria-labelledby="act-title">
+  <div class="dialog__accent"></div>
+  <form method="dialog" id="act-form" style="gap:0">
+    <div class="dialog__body">
+      <h2 class="dialog__title" id="act-title">Action</h2>
+      <p class="muted" id="act-body"></p>
+      <div id="act-fields"></div>
+      <p class="error-line" id="act-error" role="alert" hidden></p>
+    </div>
+    <div class="dialog__foot">
+      <button type="submit" value="ok" class="btn btn--primary btn--lg btn--block" id="act-ok">Confirm</button>
+      <button type="button" class="btn btn--ghost btn--block" id="act-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/board.js"></script>
+{% endblock %}

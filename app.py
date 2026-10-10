@@ -51,7 +51,7 @@ def create_app(testing=False, store=None):
         app.register_blueprint(whatsapp.bp)
         limiter.exempt(whatsapp.bp)
 
-    for endpoint, rule in (("api.citizen_report", "20 per minute"), ("api.call_start", "10 per minute"), ("api.login", "10 per minute"), ("api.admin_reset", "5 per minute")):
+    for endpoint, rule in (("api.citizen_report", "20 per minute"), ("api.citizen_upload", "10 per minute"), ("api.call_start", "10 per minute"), ("api.login", "10 per minute"), ("api.admin_reset", "5 per minute")):
         app.view_functions[endpoint] = limiter.limit(rule)(app.view_functions[endpoint])
 
     app.after_request(security.apply_headers)
@@ -77,9 +77,11 @@ def create_app(testing=False, store=None):
     def weather():
         return page("weather.html")
 
+    @app.get("/unit")
+    @app.get("/unit/<ap_id>")
     @app.get("/partner")
-    def partner():
-        return page("partner.html")
+    def unit(ap_id=None):
+        return page("unit.html")
 
     # old addresses keep working
     @app.get("/headoffice")
@@ -100,7 +102,7 @@ def create_app(testing=False, store=None):
     @app.get("/pmb")
     @app.get("/richards")
     def to_partner():
-        return redirect("/partner", 302)
+        return redirect("/unit", 302)
 
     @app.get("/health")
     def health():

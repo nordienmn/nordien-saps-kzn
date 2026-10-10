@@ -1,0 +1,61 @@
+/* Extracted from design/weather-cover.html (page-level styles). */
+
+  /* THE COVER. Neutral by design: no police marks, no SAPS fonts, no red. The only SAPS-system parts
+     are the help sheet's building blocks (dialog, choice, btn), restyled quiet. */
+  :root { --font-text: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --font-display: var(--font-text); }
+  body { background: #0b1730; }
+  .stage { display: grid; justify-items: center; grid-template-columns: minmax(0, 1fr); }
+  .phone, .wx-card, .wx-tiles > * { min-width: 0; }
+  .phone { position: relative; width: 100%; max-width: 26rem; min-height: calc(100dvh - var(--banner-h)); padding: var(--space-4) var(--space-4) var(--space-8);
+    background: linear-gradient(180deg, #2a6bb8 0%, #1f4fa3 55%, #183f86 100%); color: #fff; font-family: var(--font-text); }
+  .phone[data-tone="night"] { background: linear-gradient(180deg, #14275a 0%, #0f2149 55%, #0b1a3a 100%); }
+  .wx-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .wx-city { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); }
+  .wx-select { field-sizing: content; appearance: none; -webkit-appearance: none; background: transparent; color: #fff; border: 0; font: 600 1.5rem/1.2 var(--font-text); padding: 0.4rem 0; min-height: var(--target-min); cursor: pointer; }
+  .wx-select option { color: #0f1b33; }
+  .wx-city .icon { pointer-events: none; width: 1.25rem; height: 1.25rem; margin-left: calc(var(--space-1) * -1); }
+  .wx-gear { display: grid; place-items: center; width: var(--target-min); height: var(--target-min); border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.16); color: #fff; cursor: pointer; }
+  .wx-date { margin-top: 0.1rem; color: rgba(255, 255, 255, 0.9); font-size: 1rem; }
+  .wx-hero { display: grid; justify-items: center; text-align: center; padding: var(--space-6) 0 var(--space-4); }
+  .wx-temp { display: flex; align-items: flex-start; font-size: 6.5rem; font-weight: 200; line-height: 1; letter-spacing: -0.04em; }
+  .wx-temp .wx-deg { font-size: 3rem; margin-top: 0.4rem; font-weight: 300; }
+  .wx-icon { display: grid; place-items: center; width: 4.5rem; height: 4.5rem; margin: var(--space-2) 0; border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: default; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; }
+  .wx-icon .icon { width: 3.25rem; height: 3.25rem; stroke-width: 1.4; }
+  .wx-cond { font-size: 1.25rem; font-weight: 500; }
+  .wx-hilo { margin-top: 0.15rem; color: rgba(255, 255, 255, 0.92); }
+  .wx-card { margin-top: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.13); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+  .wx-card h2 { margin-bottom: var(--space-3); font-family: var(--font-text); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.88); display: flex; align-items: center; gap: var(--space-2); }
+  .wx-card h2 .icon { width: 1rem; height: 1rem; }
+  .wx-hours { display: flex; gap: var(--space-5); overflow-x: auto; padding-bottom: var(--space-2); scrollbar-width: none; }
+  .wx-hours::-webkit-scrollbar { display: none; }
+  .wx-hour { display: grid; justify-items: center; gap: var(--space-2); min-width: 3rem; font-size: 0.9375rem; }
+  .wx-hour .icon { width: 1.5rem; height: 1.5rem; }
+  .wx-days { list-style: none; display: grid; }
+  .wx-day { display: grid; grid-template-columns: 3.4rem 1.75rem 2.4rem 1fr 2.4rem; gap: var(--space-2); align-items: center; min-height: 2.9rem; border-top: 1px solid rgba(255, 255, 255, 0.14); font-size: 1rem; }
+  .wx-day:first-child { border-top: 0; }
+  .wx-day .icon { width: 1.5rem; height: 1.5rem; }
+  .wx-day .lo { text-align: right; color: rgba(255, 255, 255, 0.82); }
+  .wx-range { position: relative; height: 0.3rem; border-radius: 999px; background: rgba(255, 255, 255, 0.2); }
+  .wx-range i { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: linear-gradient(90deg, #8fd0ff, #ffd36b); }
+  .wx-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
+  .wx-tiles .wx-card { margin: 0; }
+  .wx-big { font-size: 1.75rem; font-weight: 500; line-height: 1.1; }
+  .wx-small { margin-top: 0.3rem; font-size: 0.875rem; color: rgba(255, 255, 255, 0.9); }
+  .wx-foot { margin-top: var(--space-6); text-align: center; font-size: 0.8125rem; color: rgba(255, 255, 255, 0.82); }
+
+  /* help sheet: quiet, neutral, calm. Neutral blue instead of gold. */
+  .helpdlg { --color-primary: #1f4fa3; --color-primary-hover: #183f86; }
+  .helpdlg .dialog__body { padding-top: var(--space-5); }
+  .helpdlg__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); position: sticky; top: 0; z-index: var(--z-raised); padding: var(--space-3) var(--space-4); background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+  .helpdlg__bar .segmented__btn { padding-inline: var(--space-3); }
+  .step[hidden] { display: none; }
+  .reveal[hidden] { display: none; }
+  .reveal { display: grid; gap: var(--space-5); animation: slide-in var(--dur-slow) var(--ease-out); }
+  .quick-exit { background: #0f1b33; }
+  .setrow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 3.25rem; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
+  .setrow:last-child { border-bottom: 0; }
+  .setrow__title { font-weight: var(--fw-semibold); }
+  .setrow__sub { font-size: var(--fs-sm); color: var(--color-text-muted); }
+  .sentbox { display: grid; justify-items: center; gap: var(--space-3); text-align: center; }
+  .rail-help { max-width: 18rem; }
+  .rail-help p { margin-bottom: var(--space-2); line-height: 1.4; }

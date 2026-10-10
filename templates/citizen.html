@@ -70,7 +70,7 @@
           <span class="emergency__icon">{{ icon('phone') }}</span>
           <span class="emergency__text">
             <span class="emergency__title" id="em-title" data-i18n="emTitle">Emergency</span>
-            <span class="emergency__sub" data-i18n="emSub">Call the SAPS KZN desk now</span>
+            <span class="emergency__sub" data-i18n="emSub">Call 10111 (SAPS KZN control room)</span>
           </span>
           {{ icon('chevron-right', 'emergency__go') }}
         </button>
@@ -167,6 +167,16 @@
           <p class="field__hint" id="c-text-h" data-i18n="fWhatHint">Only what you want to say. Do not put yourself at risk.</p>
         </div>
         {{ photos('c') }}
+        <div class="field" id="c-video-f">
+          <span class="field__label" id="c-video-l" data-i18n="fVideo">Video</span>
+          <p class="field__hint" data-i18n="fVideoHint">Up to 15 MB, about 30 seconds. Only record if it is safe.</p>
+          <input type="file" id="c-video" accept="video/*" capture="environment" hidden>
+          <p class="where__status" id="c-video-name" aria-live="polite"></p>
+          <span class="chip-row">
+            <button type="button" class="btn btn--secondary" id="c-video-add" aria-describedby="c-video-l">{{ icon('video') }}<span data-i18n="fAddVideo">Add a video</span></button>
+            <button type="button" class="btn btn--ghost" id="c-video-rm" hidden data-i18n="fRemove">Remove</button>
+          </span>
+        </div>
         <label class="choice" id="c-profile-row" hidden>
           <input type="checkbox" id="c-profile" checked>
           <span><span class="choice__title" data-i18n="profileOn">Add my profile name and number</span><span class="choice__hint" id="c-profile-who"></span></span>
@@ -342,7 +352,7 @@
         <svg class="icon icon--sm" aria-hidden="true" focusable="false" id="state-icon"><use href="/static/img/icons.svg#i-clock"/></svg>
         <span id="state-text">Connecting&hellip;</span>
       </p>
-      <h1 class="call__who" data-i18n="who">SAPS KZN Control Room</h1>
+      <h1 class="call__who" data-i18n="who">Calling 10111 · SAPS KZN Control Room</h1>
       <p class="call__timer" id="timer" role="timer" aria-live="off" aria-label="Call time"></p>
     </div>
     <div class="call__avatar" id="avatar" aria-hidden="true"><span class="brand__seal"><img src="/static/img/badge.png" alt=""></span></div>
@@ -353,7 +363,7 @@
       <li class="stepper__step" data-step="connected" data-i18n="s3">Connected</li>
     </ol>
     <div class="call__facts" style="margin-top:var(--space-3)">
-      <p class="fact fact--rec">{{ icon('record') }}<span data-i18n="recOff">This call is not recorded in this demo.</span></p>
+      <p class="fact fact--rec">{{ icon('record') }}<span id="rec-text" data-i18n="recOff">This call is not recorded in this demo.</span></p>
       <p class="fact" id="loc-line">{{ icon('map-pin') }}<span id="loc-text"></span></p>
       <p class="fact" id="ref-line" hidden>{{ icon('file') }}<span><span data-i18n="callRef">Reference</span> <span class="ref" id="call-ref" style="color:var(--color-text)"></span></span></p>
       <p class="fact" id="queue-line" hidden>{{ icon('users') }}<span id="queue-text"></span></p>

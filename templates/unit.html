@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}SAPS KZN action point{% endblock %}
+{% block chrome %}
+<div class="chrome">
+  <div class="demo-banner" role="note"><span class="demo-banner__tag">Demo</span><span>Demonstration only. Synthetic tasks. Nothing here reaches a real station, unit or organisation.</span></div>
+  <header class="app-header">
+    <a class="brand" href="/unit" aria-label="SAPS KZN action points">
+      <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
+      <span><span class="brand__name">SAPS KZN</span><span class="brand__sub" id="sub">Action point</span></span>
+    </a>
+  </header>
+</div>
+{% endblock %}
+
+{% block body %}
+<main id="main" class="unit-main" tabindex="-1">
+  <div id="unit-head" class="stack stack--2"></div>
+  <div id="unit-body" class="stack stack--4"><div class="state"><span class="spinner"></span><p class="state__text">Loading</p></div></div>
+</main>
+
+<dialog class="dialog" id="note-dlg" aria-labelledby="note-title">
+  <div class="dialog__accent"></div>
+  <form method="dialog" id="note-form">
+    <div class="dialog__body">
+      <h2 class="dialog__title" id="note-title">Add a note</h2>
+      <div class="field"><label class="field__label" for="note-in">Note (optional)</label><input class="input" id="note-in" maxlength="200" autocomplete="off"></div>
+    </div>
+    <div class="dialog__foot">
+      <button type="submit" class="btn btn--primary btn--lg btn--block" id="note-ok">Confirm</button>
+      <button type="button" class="btn btn--ghost btn--block" id="note-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/unit.js"></script>
+{% endblock %}

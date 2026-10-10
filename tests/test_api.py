@@ -331,3 +331,128 @@ def test_seed_is_marked_synthetic_and_board_is_not_empty(client):
     feed = client.get("/api/staff/feed").json
     assert len(feed["cases"]) >= 30 and all(c["synthetic"] for c in feed["cases"])
     assert feed["stats"]["received"] >= 35
+
+
+# ---------------------------------------------------------------- demo call limit and live captions
+def test_live_call_ends_itself_after_one_minute(client):
+    import time
+
+    start = client.post("/api/c/call/start", json={"mode": "voice"}).json
+    cid, t = start["id"], start["ctoken"]
+    login(client)
+    client.post(f"/api/staff/case/{cid}/answer", json={})
+
+    def age_call(seconds):
+        def fn(c):
+            c["call"]["answered_at"] = time.time() - seconds
+        client.store.patch("cases", cid, fn)
+
+    age_call(30)
+    assert client.get(f"/api/c/call/{cid}/state?t={t}").json["state"] == "live"
+    age_call(61)
+    state = client.get(f"/api/c/call/{cid}/state?t={t}").json
+    assert state["state"] == "ended" and state["limit_s"] == 60
+    assert any("one-minute demo limit" in e["text"] for e in client.store.get("cases", cid)["timeline"])
+
+
+def test_unanswered_call_is_closed_after_ringing_too_long(client):
+    import time
+
+    cid = client.post("/api/c/call/start", json={"mode": "voice"}).json["id"]
+    client.store.patch("cases", cid, lambda c: c["call"].update(started_at=time.time() - 120))
+    login(client)
+    client.get("/api/staff/feed")
+    assert client.store.get("cases", cid)["call"]["state"] == "ended"
+
+
+def test_partial_captions_are_replaced_then_finalised(client):
+    start = client.post("/api/c/call/start", json={"mode": "voice"}).json
+    cid, t = start["id"], start["ctoken"]
+    for text, partial in (("I need", True), ("I need help", True), ("I need help now", False)):
+        assert client.post(f"/api/c/call/{cid}/line", json={"t": t, "text": text, "src": "caption", "partial": partial}).status_code == 200
+    lines = client.store.get("cases", cid)["transcript"]
+    assert len(lines) == 1 and lines[0]["text"] == "I need help now" and lines[0]["partial"] is False
+
+
+# ---------------------------------------------------------------- evidence, recordings, action points
+def test_citizen_video_is_saved_with_the_report_and_playable_by_the_desk(client):
+    video = b"\x1aE\xdf\xa3" + b"0" * 5000
+    up = client.post("/api/c/upload", data=video, headers={"Content-Type": "video/webm"})
+    assert up.status_code == 200
+    r = client.post("/api/c/report", json={"kind": "crime", "type": "theft", "uploads": [up.json["upload_id"]], **UMLAZI})
+    login(client)
+    d = client.get(f"/api/staff/case/{r.json['id']}").json
+    vid = next(m for m in d["media"] if m["type"] == "video")
+    got = client.get(f"/api/staff/blob/{vid['id']}")
+    assert got.status_code == 200 and got.data == video and got.mimetype == "video/webm"
+    assert any(a["action"] == "media.view" for a in client.store.all("audit"))
+
+
+def test_upload_rejects_wrong_type_and_oversize(client):
+    assert client.post("/api/c/upload", data=b"x", headers={"Content-Type": "application/x-msdownload"}).status_code == 415
+    assert client.post("/api/c/upload", data=b"x" * (15 * 1024 * 1024 + 1), headers={"Content-Type": "video/mp4"}).status_code == 413
+
+
+def test_call_recording_chunks_are_saved_on_the_file(client):
+    cid = client.post("/api/c/call/start", json={"mode": "video"}).json["id"]
+    login(client)
+    client.post(f"/api/staff/case/{cid}/answer", json={})
+    assert client.post(f"/api/staff/case/{cid}/recording", data=b"AAAA", headers={"Content-Type": "video/webm"}).json["size"] == 4
+    assert client.post(f"/api/staff/case/{cid}/recording", data=b"BBBB", headers={"Content-Type": "video/webm"}).json["size"] == 8
+    rec = next(m for m in client.get(f"/api/staff/case/{cid}").json["media"] if m["type"] == "recording")
+    assert client.get(f"/api/staff/blob/{rec['id']}").data == b"AAAABBBB"
+
+
+def test_a_station_gets_its_own_task_page_by_private_link(client):
+    cid = client.post("/api/c/report", json={"kind": "crime", "type": "theft", "name": "Sam", "mobile": "0600000555", **UMLAZI}).json["id"]
+    login(client)
+    client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi", "unit": "Patrol vehicle", "note": "Man at the gate."})
+    points = {p["id"]: p for p in client.get("/api/staff/action-points").json["points"]}
+    st = points["st-umlazi"]
+    assert st["load"]["open"] >= 1 and "?k=" in st["url"]
+    token = st["url"].split("?k=")[1]
+    client.post("/api/auth/logout", json={})  # now an anonymous visitor holding only the link
+    assert client.get("/api/unit/st-umlazi/tasks").status_code == 403
+    assert client.get("/api/unit/st-umlazi/tasks?k=wrong").status_code == 403
+    tasks = client.get(f"/api/unit/st-umlazi/tasks?k={token}").json["tasks"]
+    mine = next(t for t in tasks if t["case_id"] == cid)
+    assert mine["instruction"] == "Man at the gate." and mine["mobile"] == "0600000555"
+    other_token = points["st-pinetown"]["url"].split("?k=")[1]
+    assert client.get(f"/api/unit/st-umlazi/tasks?k={other_token}").status_code == 403  # a link opens one door only
+    for status in ("acknowledged", "on_scene", "cleared"):
+        assert client.post(f"/api/unit/st-umlazi/task?k={token}", json={"task_kind": "deployment", "task_id": mine["id"], "status": status}).status_code == 200
+    login(client, "board")
+    assert client.get("/api/staff/feed").json["insights"]["response"]["deployments_7d"] >= 1
+
+
+def test_unit_page_hides_names_of_restricted_files(client):
+    cid = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "call", "mobile": "0600000777", "name": "Zinhle", **UMLAZI}).json["id"]
+    login(client)
+    client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "umlazi", "unit": "FCS unit"})
+    tasks = client.get("/api/unit/st-umlazi/tasks").json["tasks"]  # staff session needs no link
+    t = next(x for x in tasks if x["case_id"] == cid)
+    assert t["name"] == "" and t["mobile"] == ""
+
+
+def test_referral_partner_page_works_for_partners_too(client):
+    cid = client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "call", "mobile": "0600000888", **UMLAZI}).json["id"]
+    login(client)
+    client.post(f"/api/staff/case/{cid}/refer", json={"partner_id": "tcc-gizenga", "consent_to_share": True, "urgency": "urgent"})
+    token = next(p for p in client.get("/api/staff/action-points").json["points"] if p["id"] == "tcc-gizenga")["url"].split("?k=")[1]
+    client.post("/api/auth/logout", json={})
+    tasks = client.get(f"/api/unit/tcc-gizenga/tasks?k={token}").json["tasks"]
+    task = next(t for t in tasks if t["case_id"] == cid)
+    assert task["mobile"] == "0600000888"  # the citizen agreed to share
+    assert client.post(f"/api/unit/tcc-gizenga/task?k={token}", json={"task_kind": "referral", "task_id": task["id"], "status": "acknowledged"}).status_code == 200
+
+
+def test_a_bad_profile_photo_never_blocks_a_call_or_report(client):
+    r = client.post("/api/c/call/start", json={"mode": "voice", "name": "Sam", "mobile": "0600000999", "face": "data:image/gif;base64,R0lGODlhAQABAAAAACw="})
+    assert r.status_code == 200
+    r2 = client.post("/api/c/report", json={"kind": "crime", "type": "theft", "face": "not-an-image", **UMLAZI})
+    assert r2.status_code == 200
+
+
+def test_csp_allows_the_map_tile_host(client):
+    csp = client.get("/api/c/config").headers["Content-Security-Policy"]
+    assert "https://tile.openstreetmap.org" in csp

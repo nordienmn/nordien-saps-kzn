@@ -1,7 +1,10 @@
 """JSON API. Citizens use /api/c/*; officers use /api/auth/* and /api/staff/*."""
-from flask import Blueprint, current_app, jsonify, request, session
+import io
+import secrets as _secrets
 
-from . import geo, security, service, taxonomy, telephony
+from flask import Blueprint, Response, current_app, jsonify, request, send_file, session
+
+from . import blobs, geo, security, service, taxonomy, telephony
 from .config import Config
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -21,6 +24,8 @@ def guard():
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         if not security.same_origin_ok():
             return jsonify({"error": "Blocked: request came from another site."}), 403
+        if request.endpoint in ("api.citizen_upload", "api.call_recording"):
+            return None  # raw file bytes, checked inside the route
         if not request.is_json:
             return jsonify({"error": "Send JSON."}), 415
     return None
@@ -58,10 +63,12 @@ def citizen_report():
         return jsonify({"ok": True, "ref": tip["ref"], "code": code, "kind": "tip"})
     if kind not in ("crime", "gbv", "sos", "area"):
         raise service.Invalid("Unknown report type.", "kind")
-    case = service.create_case(s, data, channel="weather" if kind == "sos" else "app")
-    if kind == "sos" and case.get("friend"):
-        _alert_friend(case)
-    return jsonify({"ok": True, "ref": case["ref"], "id": case["id"], "kind": case["kind"], "located": case["lat"] is not None})
+    channel = "weather" if kind == "sos" or data.get("via") == "weather" else "app"
+    case = service.create_case(s, data, channel=channel)
+    notified = False
+    if case.get("friend") and channel == "weather":
+        notified = _alert_friend(case)
+    return jsonify({"ok": True, "ref": case["ref"], "id": case["id"], "kind": case["kind"], "located": case["lat"] is not None, "friend_notified": notified})
 
 
 def _alert_friend(case):
@@ -70,7 +77,7 @@ def _alert_friend(case):
         + (f"Their location: {telephony.map_link(case['lat'], case['lon'])}. " if case["lat"] is not None else "Their location was not shared. ")
         + "If you think they are in danger call 10111."
     )
-    telephony.send_whatsapp(case["friend"], text)
+    return telephony.send_whatsapp(case["friend"], text)
 
 
 @bp.get("/c/tip/<code>")
@@ -100,7 +107,7 @@ def call_state(cid):
 @bp.post("/c/call/<cid>/line")
 def call_line(cid):
     data = body()
-    service.citizen_add_line(store(), cid, data.get("t"), data.get("text"), data.get("src", "typed"))
+    service.citizen_add_line(store(), cid, data.get("t"), data.get("text"), data.get("src", "typed"), bool(data.get("partial")))
     return jsonify({"ok": True})
 
 
@@ -121,6 +128,80 @@ def call_token(cid):
 
 
 # ============================================================================ auth
+@bp.post("/c/upload")
+def citizen_upload():
+    """Evidence video or audio from the citizen. Held until the report is sent, then attached to the file."""
+    mime = (request.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    if mime not in blobs.ALLOWED_UPLOAD:
+        return jsonify({"error": "That kind of file is not accepted."}), 415
+    data = request.get_data(cache=False)
+    if not data or len(data) > blobs.MAX_UPLOAD:
+        return jsonify({"error": "That file is too large. Try a shorter video."}), 413
+    upload_id = _secrets.token_urlsafe(12)
+    blobs.stash_upload(upload_id, mime, data)
+    return jsonify({"ok": True, "upload_id": upload_id, "size": len(data)})
+
+
+@bp.post("/staff/case/<cid>/recording")
+@security.login_required("desk")
+def call_recording(cid):
+    _, officer = security.current()
+    chunk = request.get_data(cache=False)
+    if not chunk or len(chunk) > 4 * 1024 * 1024:
+        return jsonify({"error": "Bad chunk."}), 413
+    size = service.add_recording_chunk(store(), cid, officer, chunk)
+    return jsonify({"ok": True, "size": size})
+
+
+@bp.get("/staff/blob/<mid>")
+@security.login_required("desk")
+def staff_blob(mid):
+    _, officer = security.current()
+    found = service.blob_for(store(), mid, officer)
+    if found is None:
+        return jsonify({"error": "Not found."}), 404
+    mime, data = found
+    return send_file(io.BytesIO(data), mimetype=mime, conditional=True, max_age=0)
+
+
+@bp.get("/staff/action-points")
+@security.login_required("desk", "board")
+def staff_action_points():
+    load = service.ap_load(store())
+    points = service.action_points(store())
+    for ap in points:
+        ap["load"] = load.get(ap["id"], {"open": 0, "urgent": 0})
+        ap["url"] = f"/unit/{ap['id']}?k={service.unit_token(ap['id'])}"
+    return jsonify({"points": points})
+
+
+def _unit_access(ap_id):
+    role, _ = security.current()
+    token = request.args.get("k") or (request.get_json(silent=True) or {}).get("k", "")
+    return role in ("desk", "board") or service.unit_token_ok(ap_id, token)
+
+
+@bp.get("/unit/<ap_id>/tasks")
+def unit_tasks(ap_id):
+    if not _unit_access(ap_id):
+        return jsonify({"error": "This link is not valid.", "code": "auth"}), 403
+    data = service.unit_tasks(store(), ap_id)
+    if data is None:
+        return jsonify({"error": "Not found."}), 404
+    return jsonify(data)
+
+
+@bp.post("/unit/<ap_id>/task")
+def unit_task(ap_id):
+    if not _unit_access(ap_id):
+        return jsonify({"error": "This link is not valid.", "code": "auth"}), 403
+    d = body()
+    data = service.unit_tasks(store(), ap_id)
+    name = data["point"]["name"] if data else ap_id
+    service.unit_update(store(), ap_id, d.get("task_kind"), str(d.get("task_id") or ""), d.get("status"), d.get("note", ""), name)
+    return jsonify({"ok": True})
+
+
 @bp.post("/auth/login")
 def login():
     data = body()
@@ -221,7 +302,7 @@ def staff_line(cid):
     case = store().get("cases", cid)
     if not case or not case.get("call") or case["call"]["state"] != "live":
         raise service.Invalid("There is no live call on this file.")
-    service.add_line(store(), cid, "operator", data.get("text"), "caption" if data.get("src") == "caption" else "typed")
+    service.add_line(store(), cid, "operator", data.get("text"), "caption" if data.get("src") == "caption" else "typed", bool(data.get("partial")))
     return jsonify({"ok": True})
 
 

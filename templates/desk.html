@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block theme %}ops{% endblock %}
+{% block title %}SAPS KZN control room desk{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/desk.css">{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-{{ name }}"/></svg>
+{%- endmacro %}
+
+{% block body %}
+<!-- ============ sign in ============ -->
+<div id="login-view">
+  <div class="chrome"><div class="demo-banner" role="note"><span class="demo-banner__tag">Demo</span><span>Demonstration only. Synthetic cases. No real 10111 or police dispatch. A human officer stays in the loop.</span></div></div>
+  <main id="main" class="login">
+    <div class="card login__card">
+      <div class="brand"><span class="brand__seal"><img src="/static/img/badge.png" alt=""></span><span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Control room desk</span></span></div>
+      <h1 class="login__title">Sign in</h1>
+      <p class="muted">One window, five doors. Your officer ID is written on everything you do.</p>
+      <form class="stack stack--4" id="login-form" novalidate>
+        <div class="field"><label class="field__label" for="officer">Officer ID</label><input class="input" id="officer" autocomplete="username" maxlength="12" placeholder="OP-12" required></div>
+        <div class="field"><label class="field__label" for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
+        <p class="error-line" id="login-error" role="alert" hidden></p>
+        <button class="btn btn--primary btn--lg btn--block" type="submit" id="login-btn">Enter the desk</button>
+      </form>
+      <p class="muted text-sm"><a href="/commissioner">Senior leadership board</a></p>
+    </div>
+  </main>
+</div>
+
+<!-- ============ desk ============ -->
+<div id="desk-view" hidden>
+  <a class="skip-link" href="#casefile">Skip to case file</a>
+  <div class="chrome" id="chrome">
+    <div class="demo-banner" role="note"><span class="demo-banner__tag">Demo</span><span>Demonstration only. Synthetic cases. No real 10111 or police dispatch. A human officer stays in the loop.</span></div>
+    <header class="app-header app-header--ops" style="flex-wrap:wrap">
+      <a class="brand" href="/desk" aria-label="SAPS KZN control room desk">
+        <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
+        <span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Control room desk</span></span>
+      </a>
+      <div class="segmented tabs" role="tablist" aria-label="Doors" id="doors">
+        <button type="button" class="segmented__btn" role="tab" data-door="calls" aria-selected="true">Calls <span class="segmented__count segmented__count--alert" id="n-calls">0</span></button>
+        <button type="button" class="segmented__btn" role="tab" data-door="crime" aria-selected="false" tabindex="-1">Crime <span class="segmented__count" id="n-crime">0</span></button>
+        <button type="button" class="segmented__btn" role="tab" data-door="gbv" aria-selected="false" tabindex="-1">GBV <span class="segmented__count" id="n-gbv">0</span></button>
+        <button type="button" class="segmented__btn" role="tab" data-door="anon" aria-selected="false" tabindex="-1">Tip-off line <span class="segmented__count" id="n-anon">0</span></button>
+        <button type="button" class="segmented__btn" role="tab" data-door="area" aria-selected="false" tabindex="-1">Infrastructure <span class="segmented__count" id="n-area">0</span></button>
+      </div>
+      <div class="app-header__actions">
+        <button type="button" class="btn btn--ghost" id="alerts" aria-pressed="false">{{ icon('bell') }}<span id="alerts-l">Alerts off</span></button>
+        <span class="officer"><span class="officer__dot" aria-hidden="true"></span><span id="officer-id"></span></span>
+        <button type="button" class="btn btn--ghost" id="logout">{{ icon('exit') }}<span>Sign out</span></button>
+      </div>
+    </header>
+  </div>
+  <div class="desk">
+    <section class="desk__queue" aria-labelledby="queue-title" id="queue-panel" role="tabpanel">
+      <div class="desk__queue-head">
+        <div class="cluster cluster--between">
+          <h2 class="card__title" id="queue-title">Queue</h2>
+          <div class="segmented" role="group" aria-label="Filter queue" id="qfilter">
+            <button type="button" class="segmented__btn" data-f="all" aria-pressed="true" style="padding-inline:var(--space-3)">All</button>
+            <button type="button" class="segmented__btn" data-f="new" aria-pressed="false" style="padding-inline:var(--space-3)">New</button>
+            <button type="button" class="segmented__btn" data-f="mine" aria-pressed="false" style="padding-inline:var(--space-3)">Mine</button>
+          </div>
+        </div>
+        <p class="stat-line" id="stats" aria-live="polite"></p>
+      </div>
+      <ul class="queue" id="queue"></ul>
+    </section>
+    <main class="desk__main" id="main-desk">
+      <section class="incoming-wrap" id="incoming-wrap" aria-label="Incoming calls"></section>
+      <div id="error-slot"></div>
+      <article class="casefile" id="casefile" tabindex="-1" aria-label="Case file"></article>
+    </main>
+  </div>
+</div>
+
+<dialog class="dialog" id="act-dlg" aria-labelledby="act-title">
+  <div class="dialog__accent"></div>
+  <form method="dialog" id="act-form" style="gap:0">
+    <div class="dialog__body" id="act-body-wrap">
+      <h2 class="dialog__title" id="act-title">Action</h2>
+      <p class="muted" id="act-body"></p>
+      <div class="stack stack--4" id="act-fields"></div>
+      <p class="error-line" id="act-error" role="alert" hidden></p>
+    </div>
+    <div class="dialog__foot">
+      <button type="submit" value="ok" class="btn btn--primary btn--lg btn--block" id="act-ok">Confirm</button>
+      <button type="button" class="btn btn--ghost btn--block" id="act-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/desk.js"></script>
+{% endblock %}

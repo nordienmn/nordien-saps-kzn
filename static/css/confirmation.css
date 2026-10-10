@@ -1,0 +1,15 @@
+/* Extracted from design/citizen-confirmation.html (page-level styles). */
+
+  .hero-confirm { display: grid; justify-items: center; gap: var(--space-3); text-align: center; padding-top: var(--space-4); }
+  .hero-confirm p { color: var(--color-text-muted); max-width: 30ch; }
+  .reference .kv { margin-top: var(--space-1); }
+  .reference__actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: var(--space-2); }
+  .codebox { margin-block: var(--space-2); }
+  .codebox__gap { width: 0.5rem; }
+  details.how { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+  details.how summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--target-min); padding: var(--space-2) var(--space-4); cursor: pointer; font-weight: var(--fw-semibold); list-style: none; }
+  details.how summary::-webkit-details-marker { display: none; }
+  details.how[open] summary .icon { transform: rotate(180deg); }
+  details.how summary .icon { transition: transform var(--dur-base) var(--ease-out); }
+  details.how p { padding: 0 var(--space-4) var(--space-4); color: var(--color-text-muted); font-size: var(--fs-sm); }
+  .variant[hidden] { display: none; }

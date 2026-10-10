@@ -15,13 +15,15 @@ import secrets
 import time
 from datetime import datetime, timezone
 
-from . import geo, taxonomy
+from . import blobs, geo, taxonomy
 from .store import now
 
 YEAR = lambda ts=None: datetime.fromtimestamp(ts or now(), timezone.utc).year  # noqa: E731
 
 MAX_NOTE = 2000
 MAX_TRANSCRIPT_LINES = 300
+CALL_LIMIT_S = 60       # demo rule: a live call or video lasts one minute
+RING_LIMIT_S = 90       # an unanswered call is closed after this long
 MAX_PHOTO_BYTES = 250_000
 MAX_FACE_BYTES = 150_000
 MAX_PHOTOS = 3
@@ -109,17 +111,64 @@ def _ref(store, prefix, width=5):
 
 
 # ----------------------------------------------------------------------------- cases
-def _save_media(store, case, photos, face):
+def _save_media(store, case, photos, face, uploads=None):
     media = []
     for i, data_url in enumerate(photos[:MAX_PHOTOS]):
         mid = f"{case['id']}-p{i + 1}"
         store.put("media", {"id": mid, "case_id": case["id"], "type": "photo", "data_url": _check_image(data_url, MAX_PHOTO_BYTES)})
         media.append({"id": mid, "type": "photo"})
     if face:
-        mid = f"{case['id']}-face"
-        store.put("media", {"id": mid, "case_id": case["id"], "type": "face", "data_url": _check_image(face, MAX_FACE_BYTES)})
-        media.append({"id": mid, "type": "face"})
+        # The profile photo is optional. A bad one must never stop a call or a report, so it is simply left out.
+        try:
+            mid = f"{case['id']}-face"
+            store.put("media", {"id": mid, "case_id": case["id"], "type": "face", "data_url": _check_image(face, MAX_FACE_BYTES)})
+            media.append({"id": mid, "type": "face"})
+        except Invalid:
+            pass
+    for n, upload_id in enumerate((uploads or [])[:2]):
+        up = blobs.take_upload(clean(upload_id, 60))
+        if not up:
+            continue
+        mid = f"{case['id']}-v{n + 1}"
+        kind = "video" if up["mime"].startswith("video/") else "audio" if up["mime"].startswith("audio/") else "photo_file"
+        key = f"media/{case['id']}/{mid}"
+        storage = blobs.put(key, up["data"], up["mime"])
+        store.put("media", {"id": mid, "case_id": case["id"], "type": kind, "mime": up["mime"], "size": len(up["data"]), "storage": storage, "key": key})
+        media.append({"id": mid, "type": kind, "size": len(up["data"])})
     return media
+
+
+def add_recording_chunk(store, case_id, officer, chunk):
+    """Desk uploads the call recording in pieces while the call runs. It is saved on the file automatically."""
+    case = store.get("cases", case_id)
+    if case is None or not case.get("call"):
+        raise Invalid("Call not found.")
+    mid = f"{case_id}-rec"
+    meta = store.get("media", mid)
+    if meta is None:
+        key = f"media/{case_id}/{mid}"
+        meta = {"id": mid, "case_id": case_id, "type": "recording", "mime": "video/webm", "size": 0, "storage": "gcs" if blobs._bucket() is not None else "memory", "key": key}
+        store.put("media", meta)
+
+        def add(c):
+            c["media"].append({"id": mid, "type": "recording", "size": 0})
+            event(c, officer, "Call recording started and saved to this file.", "call")
+
+        store.patch("cases", case_id, add)
+    size = blobs.append(meta["key"], chunk, meta["storage"])
+    if size is None:
+        raise Invalid("The recording is too large.")
+    store.patch("media", mid, lambda m: m.update(size=size))
+    store.patch("cases", case_id, lambda c: [m.update(size=size) for m in c["media"] if m["id"] == mid])
+    return size
+
+
+def blob_for(store, media_id, officer):
+    meta = store.get("media", media_id)
+    if meta is None or "key" not in meta:
+        return None
+    audit(store, officer, "desk", "media.view", meta["case_id"], meta["type"])
+    return meta["mime"], blobs.get(meta["key"], meta["storage"])
 
 
 def create_case(store, payload, channel="app", synthetic=False, created_at=None):
@@ -179,6 +228,7 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
             "wants": wants,
             "know_person": clean(payload.get("know_person"), 6) if payload.get("know_person") in ("yes", "no", "skip") else "skip",
             "contact_pref": contact_pref,
+            "friend": clean(payload.get("friend"), 80),
         })
     elif kind == "sos":
         label_key = "weather_sos"
@@ -232,7 +282,7 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     }
     case.update(extra)
     if not synthetic:
-        case["media"] = _save_media(store, case, payload.get("photos") or [], payload.get("face") or "")
+        case["media"] = _save_media(store, case, payload.get("photos") or [], payload.get("face") or "", payload.get("uploads") or [])
     store.put("cases", case)
     return case
 
@@ -446,7 +496,21 @@ def _ctoken_ok(case, ctoken):
     return bool(case) and bool(ctoken) and hmac.compare_digest(case.get("_ctoken", ""), str(ctoken))
 
 
+def expire_calls(store):
+    """Enforce the demo limits. Called whenever calls are read, so nothing needs a background timer."""
+    t = now()
+    for c in store.all("cases"):
+        call = c.get("call")
+        if not call:
+            continue
+        if call["state"] == "live" and call.get("answered_at") and t - call["answered_at"] > CALL_LIMIT_S:
+            end_call(store, c["id"], "system", "the one-minute demo limit")
+        elif call["state"] == "ringing" and t - call["started_at"] > RING_LIMIT_S:
+            end_call(store, c["id"], "system", "the system (nobody answered)")
+
+
 def citizen_call_state(store, case_id, ctoken):
+    expire_calls(store)
     case = store.get("cases", case_id)
     if not _ctoken_ok(case, ctoken) or not case.get("call"):
         raise Invalid("Call not found.")
@@ -463,6 +527,8 @@ def citizen_call_state(store, case_id, ctoken):
         "queue_ahead": ahead,
         "answered_at": call.get("answered_at"),
         "ended_at": call.get("ended_at"),
+        "limit_s": CALL_LIMIT_S,
+        "recording": bool(call.get("recording")),
         "lines": case["transcript"][-60:],
         "ref": case["ref"],
     }
@@ -473,7 +539,7 @@ def answer_call(store, case_id, officer, transport="text", room=""):
         call = c.get("call")
         if not call or call["state"] != "ringing":
             raise Invalid("That call is no longer ringing.")
-        call.update({"state": "live", "answered_at": now(), "operator": officer, "transport": transport, "room": room})
+        call.update({"state": "live", "answered_at": now(), "operator": officer, "transport": transport, "room": room, "recording": transport == "video"})
         c["assigned_to"] = officer
         c["status"] = "in_progress"
         c["first_action_at"] = c["first_action_at"] or now()
@@ -508,25 +574,31 @@ def end_call(store, case_id, actor, who):
     return case
 
 
-def add_line(store, case_id, who, text, src="typed"):
+def add_line(store, case_id, who, text, src="typed", partial=False):
+    """Add to the transcript. A partial line is what someone is saying right now; it is replaced by the next one."""
     text = clean(text, 500)
     if not text:
         raise Invalid("Empty message.")
 
     def fn(c):
-        if len(c["transcript"]) >= MAX_TRANSCRIPT_LINES:
-            raise Invalid("Transcript is full.")
-        c["transcript"].append({"at": now(), "who": who, "text": text, "src": src})
+        lines = c["transcript"]
+        last = lines[-1] if lines else None
+        if last and last.get("partial") and last["who"] == who:
+            last.update({"text": text, "at": now(), "partial": bool(partial), "src": src})
+        else:
+            if len(lines) >= MAX_TRANSCRIPT_LINES:
+                raise Invalid("Transcript is full.")
+            lines.append({"at": now(), "who": who, "text": text, "src": src, "partial": bool(partial)})
         c["updated_at"] = now()
 
     return store.patch("cases", case_id, fn)
 
 
-def citizen_add_line(store, case_id, ctoken, text, src="typed"):
+def citizen_add_line(store, case_id, ctoken, text, src="typed", partial=False):
     case = store.get("cases", case_id)
     if not _ctoken_ok(case, ctoken):
         raise Invalid("Call not found.")
-    return add_line(store, case_id, "citizen", text, "caption" if src == "caption" else "typed")
+    return add_line(store, case_id, "citizen", text, "caption" if src == "caption" else "typed", partial)
 
 
 def citizen_end_call(store, case_id, ctoken):
@@ -570,6 +642,12 @@ def act(store, case_id, officer, payload):
             c["closed_at"] = now()
             c["first_action_at"] = c["first_action_at"] or now()
             event(c, officer, "Closed. " + note if note else "Closed.", "action")
+        elif action == "demographics":
+            if payload.get("gender") in taxonomy.GENDERS:
+                c["gender"] = payload["gender"]
+            if payload.get("age_band") in taxonomy.AGE_BANDS:
+                c["age_band"] = payload["age_band"]
+            event(c, officer, "Recorded gender and age group (grouped statistics only).", "action")
         elif action == "reopen":
             c["status"] = "in_progress"
             c["closed_at"] = None
@@ -717,6 +795,7 @@ def dispatch(store, case_id, officer, payload):
     dep = {
         "id": f"D{store.next_seq('deployment'):05d}", "station": station, "station_name": geo.station_name(station),
         "unit": unit, "status": "dispatched", "dispatched_at": now(), "dispatched_by": officer, "arrived_at": None, "cleared_at": None,
+        "acknowledged_at": None, "instruction": clean(payload.get("note"), 200),
     }
 
     def fn(c):
@@ -727,7 +806,8 @@ def dispatch(store, case_id, officer, payload):
         if c["status"] in ("new", "assigned"):
             c["status"] = "in_progress"
         c["first_action_at"] = c.get("first_action_at") or now()
-        event(c, officer, f"{unit} dispatched from {dep['station_name']}.", "deployment")
+        note = clean(payload.get("note"), 200)
+        event(c, officer, f"{unit} dispatched from {dep['station_name']}." + (" " + note if note else ""), "deployment")
 
     case = store.patch("cases", case_id, fn)
     if case is None:
@@ -737,13 +817,16 @@ def dispatch(store, case_id, officer, payload):
 
 
 def update_deployment(store, case_id, dep_id, officer, status):
-    if status not in ("on_scene", "cleared"):
+    if status not in ("acknowledged", "on_scene", "cleared"):
         raise Invalid("Unknown status.")
 
     def fn(c):
         for d in c.get("deployments", []):
             if d["id"] == dep_id:
-                if status == "on_scene" and not d["arrived_at"]:
+                if status == "acknowledged" and d["status"] == "dispatched":
+                    d["status"], d["acknowledged_at"] = "acknowledged", now()
+                    event(c, officer, f"{d['station_name']} acknowledged the task.", "deployment")
+                elif status == "on_scene" and not d["arrived_at"]:
                     d["status"], d["arrived_at"] = "on_scene", now()
                     event(c, officer, f"{d['unit']} from {d['station_name']} on scene.", "deployment")
                 elif status == "cleared":
@@ -858,6 +941,7 @@ def _tip_summary(tip, role, lang="en"):
 
 
 def feed(store, role):
+    expire_calls(store)
     cases = sorted(store.all("cases"), key=lambda c: -c["created_at"])
     tips = sorted(store.all("tips"), key=lambda t: -t["created_at"])
     refs = store.all("referrals")
@@ -1032,3 +1116,112 @@ def stats(store, cases, tips, refs):
         "series": series,
         "small_number_rule": f"Counts under {SMALL} for GBV and anonymous records are shown as a band, not a number.",
     }
+
+
+# ----------------------------------------------------------------------------- action points and their own pages
+import hashlib as _hashlib
+import hmac as _hmac
+
+from .config import Config as _Config
+
+EXTERNAL_TYPES = {"gbv_tcc", "shelter", "health", "social_worker", "transport", "municipal"}
+
+
+def action_points(store):
+    """Everywhere a file can be dropped for action. Stations take deployments; units and partners take referrals."""
+    out = []
+    for key, (name, cluster, lat, lon) in geo.STATIONS.items():
+        out.append({"id": "st-" + key, "name": name + " SAPS", "group": "Police stations", "type": "station", "cluster": geo.name(cluster), "station": key})
+    for p in sorted(store.all("partners"), key=lambda x: (x["type"], x["name"])):
+        group = "SAPS units" if p["type"] in taxonomy.SAPS_UNIT_TYPES else "Partners outside SAPS"
+        out.append({"id": p["id"], "name": p["name"], "group": group, "type": p["type"], "cluster": p.get("area", "")})
+    return out
+
+
+def unit_token(ap_id):
+    """A private link token per action point. No account is needed; whoever holds the link sees that point's tasks only."""
+    return _hmac.new(_Config.SECRET_KEY.encode(), ("unit:" + ap_id).encode(), _hashlib.sha256).hexdigest()[:20]
+
+
+def unit_token_ok(ap_id, token):
+    return bool(token) and _hmac.compare_digest(unit_token(ap_id), str(token))
+
+
+def _find_point(store, ap_id):
+    for ap in action_points(store):
+        if ap["id"] == ap_id:
+            return ap
+    return None
+
+
+def unit_tasks(store, ap_id):
+    ap = _find_point(store, ap_id)
+    if ap is None:
+        return None
+    tasks = []
+    if ap["type"] == "station":
+        for c in store.all("cases"):
+            for d in c.get("deployments", []):
+                if d["station"] == ap["station"]:
+                    show_person = not c["restricted"]
+                    tasks.append({
+                        "kind": "deployment", "id": d["id"], "case_id": c["id"], "case_ref": c["ref"], "label": case_label(c), "cluster": geo.name(c["cluster"]),
+                        "address": c["address"], "lat": c["lat"], "lon": c["lon"], "since": d["dispatched_at"], "status": d["status"], "unit": d["unit"],
+                        "instruction": d.get("instruction", ""), "detail": c["note"], "priority": c["priority"],
+                        "name": c["name"] if show_person else "", "mobile": c["mobile"] if show_person else "", "closed": c["status"] == "closed",
+                    })
+    else:
+        for item in partner_view(store, ap_id):
+            raw = store.get("referrals", item["id"]) or {}
+            tasks.append({
+                "kind": "referral", "id": item["id"], "case_id": raw.get("case_id", ""), "case_ref": item["case_ref"], "label": item["label"], "cluster": item["cluster"],
+                "address": item["address"], "lat": item["lat"], "lon": item["lon"], "since": item["created_at"], "status": item["status"], "unit": "",
+                "instruction": item.get("instruction") or item["note"], "detail": item.get("detail", ""), "priority": "high" if item["urgency"] == "urgent" else "normal",
+                "name": item.get("name", ""), "mobile": item.get("mobile", ""), "due_at": item.get("due_at"), "origin": item.get("origin", "desk"), "closed": item["status"] == "completed",
+            })
+    tasks.sort(key=lambda t: (t["closed"], -t["since"]))
+    return {"point": ap, "tasks": tasks}
+
+
+def unit_update(store, ap_id, kind, task_id, status, note, actor):
+    ap = _find_point(store, ap_id)
+    if ap is None:
+        raise Invalid("Unknown action point.")
+    if kind == "deployment":
+        owner = None
+        for c in store.all("cases"):
+            if any(d["id"] == task_id and d["station"] == ap.get("station") for d in c.get("deployments", [])):
+                owner = c["id"]
+        if owner is None:
+            raise Invalid("Task not found.")
+        update_deployment(store, owner, task_id, actor, status)
+        if note:
+            store.patch("cases", owner, lambda c: event(c, actor, "Note from " + ap["name"] + ": " + clean(note, 200), "note"))
+        return True
+    ref = store.get("referrals", task_id)
+    if ref is None or ref["partner_id"] != ap_id:
+        raise Invalid("Task not found.")
+    update_referral(store, task_id, actor, status)
+    if note:
+        coll = "cases" if store.get("cases", ref["case_id"]) else "tips"
+        store.patch(coll, ref["case_id"], lambda c: event(c, actor, "Note from " + ap["name"] + ": " + clean(note, 200), "note"))
+    return True
+
+
+def ap_load(store):
+    """Open tasks per action point, so the desk can see where the work is sitting."""
+    load = {}
+    for c in store.all("cases"):
+        if c["status"] == "closed":
+            continue
+        for d in c.get("deployments", []):
+            if d["status"] != "cleared":
+                row = load.setdefault("st-" + d["station"], {"open": 0, "urgent": 0})
+                row["open"] += 1
+                row["urgent"] += 1 if c["priority"] in ("critical", "high") else 0
+    for r in store.all("referrals"):
+        if r["status"] != "completed":
+            row = load.setdefault(r["partner_id"], {"open": 0, "urgent": 0})
+            row["open"] += 1
+            row["urgent"] += 1 if r["urgency"] == "urgent" else 0
+    return load

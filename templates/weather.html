@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weather</title>
+<!-- No web fonts here on purpose: the cover must look like any ordinary phone app. -->
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/weather.css">
+<meta name="robots" content="noindex, nofollow">
+
+</head>
+<body>
+<!-- icon sprite: generated from icons.svg (inline so it also works from file://) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.5h2.7a1 1 0 0 1 1 .8l.7 3.2a1 1 0 0 1-.4 1l-1.6 1.2a12 12 0 0 0 5.3 5.3l1.2-1.6a1 1 0 0 1 1-.4l3.2.7a1 1 0 0 1 .8 1v2.7a2 2 0 0 1-2.1 2A15.5 15.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/></g></symbol>
+
+<symbol id="i-end-call" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 14.6c1.2-1.6 2.7-3 4.5-3.9 3.2-1.6 7.8-1.6 11 0 1.8.9 3.3 2.3 4.5 3.9a1 1 0 0 1-.1 1.3l-2.2 2a1 1 0 0 1-1.2.1l-2.5-1.5a1 1 0 0 1-.5-.9v-1.7a9.8 9.8 0 0 0-5.6 0v1.7a1 1 0 0 1-.5.9l-2.5 1.5a1 1 0 0 1-1.2-.1l-2.2-2a1 1 0 0 1-.1-1.3z"/></g></symbol>
+
+<symbol id="i-video" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5z"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/></g></symbol>
+
+<symbol id="i-video-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 5h3A2.5 2.5 0 0 1 16 7.5v3m0 3v3a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3M9 21h6"/></g></symbol>
+
+<symbol id="i-mic-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.2V6a3 3 0 0 1 6 0v5.5M15 12.6a3 3 0 0 1-5.4-1.1"/><path d="M5.5 11.5a6.5 6.5 0 0 0 10.6 5M18.5 11.5c0 .8-.1 1.5-.4 2.2"/><path d="M12 18v3M9 21h6"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></g></symbol>
+
+<symbol id="i-camera-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 5h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v7.2M17 19H5.5A1.5 1.5 0 0 1 4 17.5v-9A1.5 1.5 0 0 1 5.5 7H8"/><path d="M9.9 10.3a3.5 3.5 0 0 0 4.8 4.8"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-speaker" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.4a8 8 0 0 1 0 11.2"/></g></symbol>
+
+<symbol id="i-speaker-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></g></symbol>
+
+<symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/></g></symbol>
+
+<symbol id="i-shield-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.2-4.4"/></g></symbol>
+
+<symbol id="i-map-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></g></symbol>
+
+<symbol id="i-crosshair" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l9.2 16a1 1 0 0 1-.9 1.5H3.7a1 1 0 0 1-.9-1.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-lamp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21h5M7.5 21V8.5A4.5 4.5 0 0 1 12 4h4"/><path d="M14 4h6l-1.2 3.8h-3.6z"/><path d="M17 11v2.2M14.2 10.4l-1 1.9M19.8 10.4l1 1.9"/></g></symbol>
+
+<symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5"/><path d="M15 9h3a1 1 0 0 1 1 1v10.5"/><path d="M3 20.5h18"/><path d="M8.5 8h3M8.5 12h3M8.5 16h3"/></g></symbol>
+
+<symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6M17 14a5.5 5.5 0 0 1 3.5 5.5"/></g></symbol>
+
+<symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+
+<symbol id="i-heart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/></g></symbol>
+
+<symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.2 7.6A15.6 15.6 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.5 0 2.8-.4 4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><path d="M12 14.2v2.3"/></g></symbol>
+
+<symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></g></symbol>
+
+<symbol id="i-check-circle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.7 2.7L16.2 9.4"/></g></symbol>
+
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 5 7 7-7 7"/></g></symbol>
+
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 5-7 7 7 7"/></g></symbol>
+
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9.5 7 7 7-7"/></g></symbol>
+
+<symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+
+<symbol id="i-exit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="m14 8 4 4-4 4M18 12H9"/></g></symbol>
+
+<symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21c-2.4-2.5-3.7-5.5-3.7-9S9.6 5.5 12 3z"/></g></symbol>
+
+<symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+
+<symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></g></symbol>
+
+<symbol id="i-filter" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.2V19l-4 1.5v-8.3z"/></g></symbol>
+
+<symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21h4"/></g></symbol>
+
+<symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h8M17 7h3M4 17h3M12 17h8"/><circle cx="14.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></g></symbol>
+
+<symbol id="i-record" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-chat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5l1.2-3.6A8 8 0 1 1 8.4 18.8z"/><path d="M9 10.5h6M9 13.5h4"/></g></symbol>
+
+<symbol id="i-silent-text" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-send" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 3.5 3.5 10.5l6 2.5 2.5 6z"/><path d="M9.5 13l11-9.5"/></g></symbol>
+
+<symbol id="i-escalate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8.5M6 13.5l6-6 6 6M6 3.5h12"/></g></symbol>
+
+<symbol id="i-referral" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19v-5a5 5 0 0 1 5-5h10"/><path d="m15 4.5 4 4.5-4 4.5"/></g></symbol>
+
+<symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h6.5L19 9v10.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"/></g></symbol>
+
+<symbol id="i-inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 13.5 2.4-7.2a1 1 0 0 1 .95-.7h10.3a1 1 0 0 1 .95.7l2.4 7.2v5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z"/><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5"/></g></symbol>
+
+<symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.5-4.5 3.5 3.5 3-3 5 4.5"/></g></symbol>
+
+<symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></g></symbol>
+
+<symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.8"/><path d="M5 15.5V5.8A1 1 0 0 1 6 4.8h9.7"/></g></symbol>
+
+<symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g></symbol>
+
+<symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8z"/></g></symbol>
+
+<symbol id="i-cloud-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1.6M4.8 5.8l1.1 1.1M2.5 12.5h1.6M19.2 5.8l-1.1 1.1"/><path d="M7.2 12.6a4.3 4.3 0 0 1 8.1-1.8"/><path d="M8 20a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 10 1.38A3.3 3.3 0 0 1 17.3 20z"/></g></symbol>
+
+<symbol id="i-cloud-rain" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 7.5a4 4 0 0 1-.5 8"/><path d="M8.5 18.5l-1 2M12.5 18.5l-1 2M16.5 18.5l-1 2"/></g></symbol>
+
+<symbol id="i-wind" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.4-3.2M3 13.5h14.5a2.8 2.8 0 1 1-2.7 3.5M3 18h6"/></g></symbol>
+
+<symbol id="i-droplet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.2 6 10.5a6 6 0 0 1-12 0c0-4.3 6-10.5 6-10.5z"/></g></symbol>
+
+<symbol id="i-sunrise" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v4M7.5 5.8l1.4 1.4M16.5 5.8l-1.4 1.4"/><path d="M6.5 16a5.5 5.5 0 0 1 11 0M2.5 16h2M19.5 16h2M3.5 20h17"/></g></symbol>
+
+<symbol id="i-thermo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14.2V5a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z"/><path d="M12 9v6.5"/></g></symbol>
+
+</svg>
+
+
+
+
+<div class="stage">
+<div class="phone" id="phone" data-tone="day">
+  <header class="wx-top">
+    <label class="wx-city">
+      <span class="sr-only">Choose a city</span>
+      <select class="wx-select" id="city">
+        <option>Durban</option><option>Pietermaritzburg</option><option>Richards Bay</option><option>Newcastle</option><option>Port Shepstone</option>
+      </select>
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>
+    </label>
+    <button type="button" class="wx-gear" id="gear" aria-label="Settings" aria-haspopup="dialog"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sliders"/></svg></button>
+  </header>
+  <p class="wx-date" id="date"></p>
+
+  <main id="main">
+    <section class="wx-hero" aria-label="Current weather">
+      <p class="wx-temp"><span id="temp">24</span><span class="wx-deg" id="deg">&deg;</span></p>
+      <!-- Help trigger: ordinary-looking, neutral label. Hold ~1.2 s or double-tap. Never a single tap. -->
+      <button type="button" class="wx-icon" id="trigger" aria-label="Current conditions"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud-sun" id="cond-ico"/></svg></button>
+      <p class="wx-cond" id="cond">Partly cloudy</p>
+      <p class="wx-hilo" id="hilo">H 25&deg;  L 18&deg;</p>
+    </section>
+
+    <section class="wx-card" aria-labelledby="h-hourly">
+      <h2 id="h-hourly"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clock"/></svg>Hourly forecast</h2>
+      <div class="wx-hours" id="hours"></div>
+    </section>
+
+    <section class="wx-card" aria-labelledby="h-days">
+      <h2 id="h-days"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg>7-day forecast</h2>
+      <ul class="wx-days" id="days"></ul>
+    </section>
+
+    <div class="wx-tiles">
+      <section class="wx-card" aria-labelledby="t-uv"><h2 id="t-uv"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg>UV index</h2><p class="wx-big" id="uv">9</p><p class="wx-small" id="uvl">Very high</p></section>
+      <section class="wx-card" aria-labelledby="t-wind"><h2 id="t-wind"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg>Wind</h2><p class="wx-big" id="wind">14 km/h</p><p class="wx-small" id="winddir">South-west</p></section>
+      <section class="wx-card" aria-labelledby="t-hum"><h2 id="t-hum"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-droplet"/></svg>Humidity</h2><p class="wx-big" id="hum">72%</p><p class="wx-small" id="rain">20% chance of rain</p></section>
+      <section class="wx-card" aria-labelledby="t-sun"><h2 id="t-sun"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sunrise"/></svg>Sunrise</h2><p class="wx-big" id="sunrise">05:08</p><p class="wx-small" id="sunset">Sunset 18:13</p></section>
+    </div>
+  </main>
+  <p class="wx-foot" id="upd">Updated just now</p>
+</div>
+</div>
+
+<!-- Settings + "A friend" setup -->
+<dialog class="dialog dialog--sheet" id="settings" aria-labelledby="set-title">
+  <div class="dialog__body" id="set-main">
+    <h2 class="dialog__title" id="set-title" tabindex="-1">Settings</h2>
+    <div>
+      <div class="setrow"><div><div class="setrow__title">Units</div></div>
+        <div class="segmented" role="group" aria-label="Temperature units"><button type="button" class="segmented__btn" data-unit="C" aria-pressed="true">&deg;C</button><button type="button" class="segmented__btn" data-unit="F" aria-pressed="false">&deg;F</button></div></div>
+      <div class="setrow"><div><div class="setrow__title">Rain alerts</div><div class="setrow__sub">Tell me when rain is coming</div></div>
+        <label class="choice" style="border:0;padding:0;min-height:var(--target-min);align-items:center"><span class="sr-only">Rain alerts</span><input type="checkbox" checked></label></div>
+      <div class="setrow"><div><div class="setrow__title">A friend</div><div class="setrow__sub" id="friend-sub">Share your forecast with someone</div></div>
+        <button type="button" class="btn btn--secondary" id="open-friend">Set up</button></div>
+    </div>
+  </div>
+  <div class="dialog__body" id="set-friend" hidden>
+    <button type="button" class="btn btn--ghost" id="friend-back" style="justify-self:start;padding-left:0"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"/></svg>Settings</button>
+    <h2 class="dialog__title" id="friend-title" tabindex="-1">A friend</h2>
+    <p class="muted">Pick one person you trust. If you ever ask for help from this screen, we can send them a short text so they know to check on you. It never says why.</p>
+    <div class="field"><label class="field__label" for="f-name">Friend's first name</label><input class="input" id="f-name" autocomplete="off" placeholder="Thandi"></div>
+    <div class="field"><label class="field__label" for="f-mob">Friend's mobile number</label><input class="input" id="f-mob" type="tel" inputmode="tel" autocomplete="off" placeholder="082 555 0100"><p class="field__hint">Stored on this phone only.</p></div>
+    <label class="choice"><input type="checkbox" id="f-loc"><span><span class="choice__title">Include my approximate area in the text</span><span class="choice__hint">Off unless you turn it on.</span></span></label>
+    <details class="card card--sunken card--tight">
+      <summary style="cursor:pointer;font-weight:var(--fw-semibold);min-height:var(--target-min);display:flex;align-items:center">How to ask for help</summary>
+      <p class="text-sm muted" style="margin-top:var(--space-2)">On the main screen, <b>hold the weather icon for about a second</b>, or <b>tap it twice</b>. A question always comes first, so nothing is sent by accident. The Exit button always brings you back here.</p>
+    </details>
+    <div class="banner banner--warning"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span><b>Demonstration.</b> No text is sent to your friend in this demo. What your friend would receive is described in design-system.md.</span></div>
+  </div>
+  <div class="dialog__foot">
+    <button type="button" class="btn btn--primary btn--lg btn--block" id="set-done">Done</button>
+  </div>
+</dialog>
+
+<!-- HELP: confirm sheet, then triage. Quick exit is always on screen. Esc also exits. -->
+<dialog class="dialog dialog--sheet helpdlg" id="help" aria-labelledby="h-title">
+  <div class="helpdlg__bar">
+    <div class="segmented" role="group" aria-label="Language"><button type="button" class="segmented__btn" data-hl="en" lang="en" aria-pressed="true">EN</button><button type="button" class="segmented__btn" data-hl="zu" lang="zu" aria-pressed="false">ZU</button></div>
+    <button type="button" class="quick-exit" id="qx" aria-label="Quick exit: return to the weather screen"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-exit"/></svg><span data-i="exit">Exit</span></button>
+  </div>
+
+  <!-- Step 1: confirm -->
+  <section class="step" id="st1">
+    <div class="dialog__body">
+      <h2 class="dialog__title" id="h-title" tabindex="-1" data-i="c_t">Ask for help?</h2>
+      <p class="muted" data-i="c_b">A police desk will see your approximate area and can call you back, if you choose. Nothing is sent until you tap Send on the next screen.</p>
+      <div class="banner banner--warning"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span data-i="c_demo">This is a demonstration. No real police desk will receive this.</span></div>
+    </div>
+    <div class="dialog__foot">
+      <button type="button" class="btn btn--primary btn--lg btn--block" id="c-yes" data-i="c_yes">Yes, I need help</button>
+      <button type="button" class="btn btn--secondary btn--block" id="c-no" data-i="c_no">No, go back</button>
+    </div>
+  </section>
+
+  <!-- Step 2: triage. "Are you safe right now?" comes first. -->
+  <section class="step" id="st2" hidden>
+    <form class="dialog__body" id="triage" onsubmit="return false">
+      <div class="stack stack--2">
+        <h2 class="dialog__title" tabindex="-1" id="t-title" data-i="s_t">Are you safe right now?</h2>
+        <p class="muted" data-i="s_b">We believe you. Share only what you want to.</p>
+      </div>
+      <fieldset class="choice-group">
+        <legend class="sr-only" data-i="s_t">Are you safe right now?</legend>
+        <label class="choice"><input type="radio" name="safe" value="yes"><span class="choice__title" data-i="s_yes">Yes, I can talk</span></label>
+        <label class="choice"><input type="radio" name="safe" value="no"><span class="choice__title" data-i="s_no">No, I am not safe. Send help quietly</span></label>
+        <label class="choice"><input type="radio" name="safe" value="unsure"><span class="choice__title" data-i="s_un">I am not sure</span></label>
+      </fieldset>
+      <div class="banner banner--danger" id="danger" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg><span><a href="tel:10111" style="color:inherit;font-weight:var(--fw-bold)" data-i="s_call">If you are in danger right now, call 10111.</a></span></div>
+
+      <div class="reveal" id="more" hidden>
+        <fieldset class="choice-group">
+          <legend data-i="k_t">How can we reach you?</legend>
+          <label class="choice"><input type="radio" name="reach" value="call" checked><span class="choice__title" data-i="k_call">You may call me</span></label>
+          <label class="choice"><input type="radio" name="reach" value="sms"><span class="choice__title" data-i="k_sms">SMS only</span></label>
+          <label class="choice"><input type="radio" name="reach" value="none"><span class="choice__title" data-i="k_none">Do not contact me yet</span></label>
+        </fieldset>
+        <div class="field" id="mob-f" hidden>
+          <label class="field__label" for="mob" data-i="m_t">Your mobile number</label>
+          <input class="input" id="mob" type="tel" inputmode="tel" autocomplete="off" maxlength="20">
+          <p class="field__hint" data-i="m_h">Only used to reach you, the way you chose.</p>
+        </div>
+        <fieldset class="choice-group">
+          <legend data-i="n_t">What would help? (choose any)</legend>
+          <label class="choice"><input type="checkbox" name="need" data-w="social_worker"><span class="choice__title" data-i="n_talk">Someone to talk to</span></label>
+          <label class="choice"><input type="checkbox" name="need" data-w="hospital"><span class="choice__title" data-i="n_med">Medical care</span></label>
+          <label class="choice"><input type="checkbox" name="need" data-w="shelter,transport"><span class="choice__title" data-i="n_safe">A safe place or transport</span></label>
+        </fieldset>
+        <fieldset class="choice-group">
+          <legend data-i="w_t">Do you know who did this? (You do not have to say now.)</legend>
+          <label class="choice"><input type="radio" name="who" value="yes"><span class="choice__title" data-i="w_yes">Yes</span></label>
+          <label class="choice"><input type="radio" name="who" value="no"><span class="choice__title" data-i="w_no">No</span></label>
+          <label class="choice"><input type="radio" name="who" value="later" checked><span class="choice__title" data-i="w_later">Not now</span></label>
+        </fieldset>
+      </div>
+    </form>
+    <p class="error-line" id="send-error" role="alert" hidden style="margin:0 var(--space-5)"></p>
+    <div class="dialog__foot" id="send-foot" hidden>
+      <button type="button" class="btn btn--primary btn--lg btn--block" id="send" data-i="s_send">Send to the desk</button>
+    </div>
+  </section>
+
+  <!-- Step 3: sent -->
+  <section class="step" id="st3" hidden>
+    <div class="dialog__body" role="status" aria-live="polite">
+      <div class="sentbox">
+        <span class="check-badge"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg></span>
+        <h2 class="dialog__title" tabindex="-1" id="d-title" data-i="d_t">We have your request</h2>
+        <p class="muted" data-i="d_b">A desk officer has it. If you chose to be called, they will call you.</p>
+        <p class="ref" id="d-ref" style="font-size:var(--fs-lg);color:var(--color-primary)"></p>
+        <p class="text-sm muted" id="d-friend" hidden data-i="d_friend">We also sent a message to your friend.</p>
+      </div>
+      <div class="banner banner--info"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-heart"/></svg><span data-i="d_line">GBV Command Centre: 0800 428 428, free, 24 hours.</span></div>
+    </div>
+    <div class="dialog__foot"><button type="button" class="btn btn--primary btn--lg btn--block" id="d-done" data-i="d_done">Done</button></div>
+  </section>
+</dialog>
+
+
+
+
+<script src="/static/js/core.js"></script>
+<script src="/static/js/weather.js"></script>
+</body>
+</html>

@@ -275,6 +275,17 @@
   $("#c-draft-no").addEventListener("click", () => { store(DRAFT, null); $("#c-draft").hidden = true; });
   ["c-type", "c-place", "c-text"].forEach((id) => $("#" + id).addEventListener("input", saveDraft));
 
+  // evidence video: chosen here, uploaded when the report is sent
+  let crimeVideo = null;
+  $("#c-video-add").addEventListener("click", () => $("#c-video").click());
+  $("#c-video").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { crimeVideo = null; $("#c-video-name").textContent = ""; $("#c-video-rm").hidden = true; return toast(t("errVideoBig")); }
+    crimeVideo = f; $("#c-video-name").textContent = f.name + " (" + Math.round(f.size / 1024 / 1024 * 10) / 10 + " MB)"; $("#c-video-rm").hidden = false;
+  });
+  $("#c-video-rm").addEventListener("click", () => { crimeVideo = null; $("#c-video-name").textContent = ""; $("#c-video-rm").hidden = true; });
+
   $("#f-crime").addEventListener("submit", async (e) => {
     e.preventDefault();
     formError("c-error", ""); fieldError("c-type", "");
@@ -287,8 +298,20 @@
     if (timeVal) body.occurred_at = new Date(timeVal).getTime();
     if (useProfile) { body.name = p.name; body.mobile = p.mobile; if (p.face) body.face = p.face; }
     try {
-      const r = await submitting($("#c-submit"), () => api("/api/c/report", { body }));
+      const r = await submitting($("#c-submit"), async () => {
+        if (crimeVideo) {
+          let up;
+          try {
+            const res = await fetch("/api/c/upload", { method: "POST", credentials: "same-origin", headers: { "Content-Type": crimeVideo.type || "video/mp4" }, body: crimeVideo });
+            up = await res.json();
+            if (!res.ok) throw new Error(up.error || "upload");
+          } catch (ex) { const err = new Error(t("errVideoUp")); err.status = 422; throw err; }
+          body.uploads = [up.upload_id];
+        }
+        return api("/api/c/report", { body });
+      });
       store(DRAFT, null);
+      crimeVideo = null; $("#c-video-name").textContent = ""; $("#c-video-rm").hidden = true;
       $("#f-crime").reset(); resetWhere("c"); $('[data-photos="c"]')._reset();
       showDone({ title: t("doneT"), body: t("doneDemo"), ref: r.ref });
     } catch (err) { mapError("c", err); }
@@ -456,12 +479,13 @@
     let s;
     try { s = await api(`/api/c/call/${call.id}/state?t=${encodeURIComponent(call.ctoken)}`); } catch (e) { return; }
     renderLines(s.lines);
+    if (s.recording !== undefined) { const rt = $("#rec-text"); if (rt) rt.textContent = s.recording ? t("recOn") : t("recOff"); }
     if (s.state === "ringing") {
       const q = $("#queue-line"); q.hidden = false;
       $("#queue-text").textContent = s.queue_ahead > 0 ? t("ahead", { n: s.queue_ahead }) : t("first");
     } else { $("#queue-line").hidden = true; }
     if (s.state === "live" && call.state !== "connected") {
-      call.transport = s.transport; call.answeredAt = s.answered_at;
+      call.transport = s.transport; call.answeredAt = s.answered_at; call.limit = s.limit_s || 60;
       setState("connected");
       startTimer();
       if (s.transport === "video") joinVideo();
@@ -470,13 +494,14 @@
   }
 
   function renderLines(lines) {
-    if (lines.length === call.lines) return;
-    call.lines = lines.length;
+    const sig = lines.length + ":" + (lines.length ? lines[lines.length - 1].text : "");
+    if (sig === call.sig) return;
+    call.sig = sig; call.lines = lines.length;
     const ul = $("#lines"); clear(ul);
     lines.forEach((l) => {
       const mine = l.who === "citizen";
-      ul.appendChild(h("li", { class: "transcript__line" + (mine ? " transcript__line--you" : "") },
-        h("span.transcript__who", { text: mine ? t("you") : t("operator") }), h("span.transcript__text", { text: l.text })));
+      ul.appendChild(h("li", { class: "transcript__line" + (mine ? " transcript__line--you" : "") + (l.partial ? " transcript__line--partial" : "") },
+        h("span.transcript__who", { text: mine ? t("you") : t("operator") }), h("span.transcript__text", { text: l.text + (l.partial ? " …" : "") })));
     });
     ul.scrollTop = ul.scrollHeight;
     if (call.state === "connected" || call.state === "ended") $("#captions").hidden = false;
@@ -484,7 +509,12 @@
 
   function startTimer() {
     clearInterval(tickTimer);
-    const tick = () => { $("#timer").textContent = fmtClock(Date.now() / 1000 - call.answeredAt); };
+    const limit = call.limit || 60;
+    const tick = () => {
+      const el = Date.now() / 1000 - call.answeredAt;
+      $("#timer").textContent = fmtClock(el) + " / " + fmtClock(limit);
+      $("#timer").setAttribute("aria-label", t("limitNote"));
+    };
     tick(); tickTimer = setInterval(tick, 1000);
   }
 
@@ -560,10 +590,15 @@
   function startCaptions() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR || recog) return;
-    recog = new SR(); recog.continuous = true; recog.interimResults = false; recog.lang = "en-ZA";
+    recog = new SR(); recog.continuous = true; recog.interimResults = true; recog.lang = "en-ZA";
+    let last = 0;
     recog.onresult = (ev) => {
       const res = ev.results[ev.results.length - 1];
-      if (res.isFinal && call && call.id) api(`/api/c/call/${call.id}/line`, { body: { t: call.ctoken, text: res[0].transcript, src: "caption" } }).catch(() => {});
+      const text = res[0].transcript;
+      const now = Date.now();
+      if (!res.isFinal && now - last < 600) return; // show what is being said about twice a second
+      last = now;
+      if (call && call.id) api(`/api/c/call/${call.id}/line`, { body: { t: call.ctoken, text, src: "caption", partial: !res.isFinal } }).catch(() => {});
     };
     recog.onend = () => { if (recog && call && call.state === "connected") try { recog.start(); } catch (e) { /* already running */ } };
     try { recog.start(); } catch (e) { recog = null; }

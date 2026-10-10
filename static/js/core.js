@@ -6,10 +6,14 @@
 
   /** h("div.card#id", {attr}, child, child ...) builds elements. Strings become text nodes, never HTML. */
   function h(spec, attrs, ...kids) {
-    const m = /^([a-z0-9-]+)?(#[\w-]+)?((?:\.[\w-]+)*)$/i.exec(spec);
-    const el = document.createElement(m && m[1] ? m[1] : "div");
-    if (m && m[2]) el.id = m[2].slice(1);
-    if (m && m[3]) el.className = m[3].split(".").join(" ").trim();
+    // "tag.class.class#id" in any order after the tag name
+    const tagM = /^([a-z][a-z0-9-]*)?/i.exec(spec);
+    const el = document.createElement(tagM && tagM[1] ? tagM[1] : "div");
+    const rest = spec.slice(tagM ? tagM[0].length : 0);
+    const parts = rest.match(/[.#][\w-]+/g) || [];
+    const classes = [];
+    parts.forEach((part) => { if (part[0] === "#") el.id = part.slice(1); else classes.push(part.slice(1)); });
+    if (classes.length) el.className = classes.join(" ");
     if (attrs && typeof attrs === "object" && !(attrs instanceof Node) && !Array.isArray(attrs)) {
       for (const [k, v] of Object.entries(attrs)) {
         if (v === null || v === undefined || v === false) continue;
@@ -87,10 +91,10 @@
     let stopped = false, fails = 0, timer = null;
     async function tick() {
       if (stopped) return;
-      if (!document.hidden) {
-        try { await fn(); fails = 0; } catch (e) { fails += 1; if (e && e.code === "auth") return; }
-      }
-      timer = setTimeout(tick, Math.min(ms * (1 + fails), 15000));
+      try { await fn(); fails = 0; } catch (e) { fails += 1; if (window.console) console.error("poll error:", e); if (e && e.code === "auth") return; }
+      // A hidden tab still polls, but slowly, so a desk left in the background is never stale for long.
+      const base = document.hidden ? ms * 4 : ms;
+      timer = setTimeout(tick, Math.min(base * (1 + fails), 20000));
     }
     tick();
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !stopped) { clearTimeout(timer); tick(); } });
