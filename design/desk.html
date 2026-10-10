@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en" data-theme="ops">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAPS KZN - Control room desk (DEMO)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../design/tokens.css">
+<link rel="stylesheet" href="../design/components.css">
+<style>
+  .desk { display: grid; grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr); min-height: calc(100dvh - var(--chrome-h, 6rem)); }
+  .desk__queue { position: sticky; top: var(--chrome-h, 6rem); align-self: start; height: calc(100dvh - var(--chrome-h, 6rem)); overflow: auto; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+  .desk__queue-head { position: sticky; top: 0; z-index: var(--z-raised); padding: var(--space-4) var(--space-4) var(--space-3); background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: grid; gap: var(--space-3); }
+  .desk__main { display: grid; gap: var(--space-5); align-content: start; padding: var(--space-5) var(--space-6) var(--space-12); min-width: 0; }
+  .app-header .tabs { margin-inline: auto; }
+  .app-header--ops { gap: var(--space-4); }
+  .officer { display: inline-flex; align-items: center; gap: var(--space-2); padding: 0.35rem 0.8rem; border-radius: var(--radius-pill); background: var(--color-surface); border: 1px solid var(--color-border); font-size: var(--fs-sm); }
+  .officer__dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--color-answer); }
+  .stat-line { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--fs-sm); color: var(--color-text-muted); }
+  .stat-line b { color: var(--color-text); font-family: var(--font-display); font-size: var(--fs-md); }
+  .casefile__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+  .casefile__col { display: grid; gap: var(--space-4); min-width: 0; }
+  .actions-wrap { position: sticky; top: var(--chrome-h, 6rem); z-index: var(--z-raised); margin-inline: calc(var(--space-6) * -1); padding: var(--space-3) var(--space-6); background: color-mix(in srgb, var(--color-bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--color-border); }
+  .map--small { min-height: 13rem; border-radius: var(--radius-md); }
+  .lockbox { display: grid; gap: var(--space-3); justify-items: start; padding: var(--space-4); border: 1px dashed var(--restricted-border); border-radius: var(--radius-md); background: var(--restricted-bg); color: var(--restricted-fg); }
+  .lockbox p { font-size: var(--fs-sm); }
+  .lockbox .btn { --btn-fg: var(--restricted-fg); --btn-bd: var(--restricted-border); }
+  .answers { list-style: none; display: grid; gap: var(--space-2); }
+  .answers li { display: flex; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border); font-size: var(--fs-sm); }
+  .answers li span:first-child { color: var(--color-text-muted); }
+  .answers li span:last-child { font-weight: var(--fw-semibold); text-align: right; }
+  .incoming-wrap { display: grid; gap: var(--space-3); }
+  .incoming-wrap .call-controls--inline .call-btn { color: var(--color-text); }
+  .queue-empty { padding: var(--space-6) var(--space-4); }
+  @media (max-width: 1180px) {
+    .casefile__grid { grid-template-columns: minmax(0, 1fr); }
+    .incoming-call { grid-template-columns: auto 1fr; }
+    .incoming-call__actions { grid-column: 1 / -1; grid-template-columns: 2fr 1fr; }
+    .app-header .tabs { order: 5; flex-basis: 100%; margin-inline: 0; }
+  }
+  @media (max-width: 1050px) { .action-bar { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<!-- icon sprite: generated from icons.svg (inline so it also works from file://) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.5h2.7a1 1 0 0 1 1 .8l.7 3.2a1 1 0 0 1-.4 1l-1.6 1.2a12 12 0 0 0 5.3 5.3l1.2-1.6a1 1 0 0 1 1-.4l3.2.7a1 1 0 0 1 .8 1v2.7a2 2 0 0 1-2.1 2A15.5 15.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/></g></symbol>
+
+<symbol id="i-end-call" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 14.6c1.2-1.6 2.7-3 4.5-3.9 3.2-1.6 7.8-1.6 11 0 1.8.9 3.3 2.3 4.5 3.9a1 1 0 0 1-.1 1.3l-2.2 2a1 1 0 0 1-1.2.1l-2.5-1.5a1 1 0 0 1-.5-.9v-1.7a9.8 9.8 0 0 0-5.6 0v1.7a1 1 0 0 1-.5.9l-2.5 1.5a1 1 0 0 1-1.2-.1l-2.2-2a1 1 0 0 1-.1-1.3z"/></g></symbol>
+
+<symbol id="i-video" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5z"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/></g></symbol>
+
+<symbol id="i-video-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 5h3A2.5 2.5 0 0 1 16 7.5v3m0 3v3a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3M9 21h6"/></g></symbol>
+
+<symbol id="i-mic-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.2V6a3 3 0 0 1 6 0v5.5M15 12.6a3 3 0 0 1-5.4-1.1"/><path d="M5.5 11.5a6.5 6.5 0 0 0 10.6 5M18.5 11.5c0 .8-.1 1.5-.4 2.2"/><path d="M12 18v3M9 21h6"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></g></symbol>
+
+<symbol id="i-camera-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 5h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v7.2M17 19H5.5A1.5 1.5 0 0 1 4 17.5v-9A1.5 1.5 0 0 1 5.5 7H8"/><path d="M9.9 10.3a3.5 3.5 0 0 0 4.8 4.8"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-speaker" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.4a8 8 0 0 1 0 11.2"/></g></symbol>
+
+<symbol id="i-speaker-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></g></symbol>
+
+<symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/></g></symbol>
+
+<symbol id="i-shield-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.2-4.4"/></g></symbol>
+
+<symbol id="i-map-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></g></symbol>
+
+<symbol id="i-crosshair" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l9.2 16a1 1 0 0 1-.9 1.5H3.7a1 1 0 0 1-.9-1.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-lamp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21h5M7.5 21V8.5A4.5 4.5 0 0 1 12 4h4"/><path d="M14 4h6l-1.2 3.8h-3.6z"/><path d="M17 11v2.2M14.2 10.4l-1 1.9M19.8 10.4l1 1.9"/></g></symbol>
+
+<symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5"/><path d="M15 9h3a1 1 0 0 1 1 1v10.5"/><path d="M3 20.5h18"/><path d="M8.5 8h3M8.5 12h3M8.5 16h3"/></g></symbol>
+
+<symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6M17 14a5.5 5.5 0 0 1 3.5 5.5"/></g></symbol>
+
+<symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+
+<symbol id="i-heart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/></g></symbol>
+
+<symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.2 7.6A15.6 15.6 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.5 0 2.8-.4 4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><path d="M12 14.2v2.3"/></g></symbol>
+
+<symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></g></symbol>
+
+<symbol id="i-check-circle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.7 2.7L16.2 9.4"/></g></symbol>
+
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 5 7 7-7 7"/></g></symbol>
+
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 5-7 7 7 7"/></g></symbol>
+
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9.5 7 7 7-7"/></g></symbol>
+
+<symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+
+<symbol id="i-exit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="m14 8 4 4-4 4M18 12H9"/></g></symbol>
+
+<symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21c-2.4-2.5-3.7-5.5-3.7-9S9.6 5.5 12 3z"/></g></symbol>
+
+<symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+
+<symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></g></symbol>
+
+<symbol id="i-filter" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.2V19l-4 1.5v-8.3z"/></g></symbol>
+
+<symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21h4"/></g></symbol>
+
+<symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h8M17 7h3M4 17h3M12 17h8"/><circle cx="14.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></g></symbol>
+
+<symbol id="i-record" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-chat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5l1.2-3.6A8 8 0 1 1 8.4 18.8z"/><path d="M9 10.5h6M9 13.5h4"/></g></symbol>
+
+<symbol id="i-silent-text" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-send" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 3.5 3.5 10.5l6 2.5 2.5 6z"/><path d="M9.5 13l11-9.5"/></g></symbol>
+
+<symbol id="i-escalate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8.5M6 13.5l6-6 6 6M6 3.5h12"/></g></symbol>
+
+<symbol id="i-referral" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19v-5a5 5 0 0 1 5-5h10"/><path d="m15 4.5 4 4.5-4 4.5"/></g></symbol>
+
+<symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h6.5L19 9v10.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"/></g></symbol>
+
+<symbol id="i-inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 13.5 2.4-7.2a1 1 0 0 1 .95-.7h10.3a1 1 0 0 1 .95.7l2.4 7.2v5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z"/><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5"/></g></symbol>
+
+<symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.5-4.5 3.5 3.5 3-3 5 4.5"/></g></symbol>
+
+<symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></g></symbol>
+
+<symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.8"/><path d="M5 15.5V5.8A1 1 0 0 1 6 4.8h9.7"/></g></symbol>
+
+<symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g></symbol>
+
+<symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8z"/></g></symbol>
+
+<symbol id="i-cloud-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1.6M4.8 5.8l1.1 1.1M2.5 12.5h1.6M19.2 5.8l-1.1 1.1"/><path d="M7.2 12.6a4.3 4.3 0 0 1 8.1-1.8"/><path d="M8 20a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 10 1.38A3.3 3.3 0 0 1 17.3 20z"/></g></symbol>
+
+<symbol id="i-cloud-rain" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 7.5a4 4 0 0 1-.5 8"/><path d="M8.5 18.5l-1 2M12.5 18.5l-1 2M16.5 18.5l-1 2"/></g></symbol>
+
+<symbol id="i-wind" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.4-3.2M3 13.5h14.5a2.8 2.8 0 1 1-2.7 3.5M3 18h6"/></g></symbol>
+
+<symbol id="i-droplet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.2 6 10.5a6 6 0 0 1-12 0c0-4.3 6-10.5 6-10.5z"/></g></symbol>
+
+<symbol id="i-sunrise" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v4M7.5 5.8l1.4 1.4M16.5 5.8l-1.4 1.4"/><path d="M6.5 16a5.5 5.5 0 0 1 11 0M2.5 16h2M19.5 16h2M3.5 20h17"/></g></symbol>
+
+<symbol id="i-thermo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14.2V5a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z"/><path d="M12 9v6.5"/></g></symbol>
+
+</svg>
+
+<a class="skip-link" href="#casefile">Skip to case file</a>
+
+<div class="chrome" id="chrome">
+  <div class="demo-banner" role="note">
+    <span class="demo-banner__tag">Demo</span>
+    <span>Demonstration only. Synthetic cases. No real 10111 or police dispatch. A human officer stays in the loop.</span>
+  </div>
+  <header class="app-header app-header--ops" style="flex-wrap:wrap">
+    <a class="brand" href="desk.html" aria-label="SAPS KZN control room desk">
+      <span class="brand__seal"><img src="badge.png" alt=""></span>
+      <span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Control room desk</span></span>
+    </a>
+    <div class="segmented tabs" role="tablist" aria-label="Doors" id="doors">
+      <button type="button" class="segmented__btn" role="tab" id="tab-calls" data-door="calls" aria-selected="true" aria-controls="queue-panel">Calls <span class="segmented__count segmented__count--alert" id="n-calls">0</span></button>
+      <button type="button" class="segmented__btn" role="tab" id="tab-crime" data-door="crime" aria-selected="false" tabindex="-1" aria-controls="queue-panel">Crime <span class="segmented__count" id="n-crime">0</span></button>
+      <button type="button" class="segmented__btn" role="tab" id="tab-gbv" data-door="gbv" aria-selected="false" tabindex="-1" aria-controls="queue-panel"><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>GBV <span class="segmented__count" id="n-gbv">0</span></button>
+      <button type="button" class="segmented__btn" role="tab" id="tab-anon" data-door="anon" aria-selected="false" tabindex="-1" aria-controls="queue-panel"><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>Anonymous <span class="segmented__count" id="n-anon">0</span></button>
+    </div>
+    <div class="app-header__actions">
+      <button type="button" class="btn btn--secondary" id="alerts" aria-pressed="true"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-bell"/></svg><span id="alerts-l">Alerts on</span></button>
+      <span class="officer" title="Officer OP-12, Durban Central desk"><span class="officer__dot" aria-hidden="true"></span>OP-12</span>
+      <a class="btn btn--ghost" href="commissioner.html">Leadership board <svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-chevron-right"/></svg></a>
+    </div>
+  </header>
+</div>
+
+<div class="desk">
+  <section class="desk__queue" aria-labelledby="queue-title" id="queue-panel" role="tabpanel">
+    <div class="desk__queue-head">
+      <div class="cluster cluster--between">
+        <h2 class="card__title" id="queue-title">Queue</h2>
+        <div class="segmented" role="group" aria-label="Filter queue" id="qfilter">
+          <button type="button" class="segmented__btn" data-f="all" aria-pressed="true" style="padding-inline:var(--space-3)">All</button>
+          <button type="button" class="segmented__btn" data-f="new" aria-pressed="false" style="padding-inline:var(--space-3)">New</button>
+          <button type="button" class="segmented__btn" data-f="mine" aria-pressed="false" style="padding-inline:var(--space-3)">Mine</button>
+        </div>
+      </div>
+      <p class="stat-line" id="stats" aria-live="polite"></p>
+    </div>
+    <ul class="queue" id="queue"></ul>
+  </section>
+
+  <main class="desk__main" id="main">
+    <!-- INCOMING CALL: unmistakable, interrupts every door -->
+    <section class="incoming-wrap" id="incoming-wrap" aria-label="Incoming call">
+      <div class="incoming-call" id="incoming" role="alert">
+        <div class="incoming-call__icon" aria-hidden="true"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone" id="in-icon"/></svg></div>
+        <div>
+          <span class="incoming-call__tag" id="in-tag"><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg><span id="in-tag-t">Incoming emergency call</span></span>
+          <p class="incoming-call__name" id="in-name">Nomvula Dlamini</p>
+          <p class="incoming-call__meta" id="in-meta">
+            <span><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-video"/></svg>Video call</span>
+            <span><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-user"/></svg>Profile attached &middot; 082 555 0143</span>
+            <span><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-map-pin"/></svg>Umlazi, Section V &middot; within 40 m (simulated GPS)</span>
+          </p>
+        </div>
+        <div class="incoming-call__actions" id="in-actions">
+          <p class="incoming-call__timer num" id="in-timer" aria-label="Waiting time">00:08</p>
+          <button type="button" class="btn btn--answer btn--lg btn--block" id="answer"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg>ANSWER</button>
+          <button type="button" class="btn btn--secondary btn--block" id="pass">Pass to next operator</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="error-slot"></div>
+
+    <article class="casefile" id="casefile" tabindex="-1" aria-label="Case file"></article>
+  </main>
+</div>
+
+<!-- Action dialog used by Refer, Escalate, Close -->
+<dialog class="dialog" id="act-dlg" aria-labelledby="act-title">
+  <div class="dialog__accent"></div>
+  <form method="dialog" id="act-form" class="stack stack--0" style="gap:0">
+    <div class="dialog__body">
+      <h2 class="dialog__title" id="act-title">Action</h2>
+      <p class="muted" id="act-body"></p>
+      <div class="field" id="act-field" hidden>
+        <label class="field__label" for="act-select" id="act-label">Choose</label>
+        <select class="select" id="act-select"></select>
+        <p class="field__hint" id="act-hint"></p>
+      </div>
+    </div>
+    <div class="dialog__foot">
+      <button type="submit" value="ok" class="btn btn--primary btn--lg btn--block" id="act-ok">Confirm</button>
+      <button type="button" class="btn btn--ghost btn--block" id="act-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast-region" role="status" aria-live="polite" id="toasts"></div>
+
+<aside class="mock-rail is-collapsed" aria-label="Mockup controls (not part of the app)">
+  <button type="button" class="mock-rail__toggle" aria-expanded="false"><span class="mock-rail__title">Mockup controls +</span></button>
+  <div class="mock-rail__body">
+  <div class="mock-rail__row">
+    <button type="button" id="r-incoming">Ring incoming call</button>
+    <button type="button" id="r-error" aria-pressed="false">Offline state</button>
+    <button type="button" id="r-load">Replay loading</button>
+  </div>
+  </div>
+</aside>
+
+<script>
+/* ---------- helpers: DOM built with textContent only (no innerHTML with data) ---------- */
+var NS = "http://www.w3.org/2000/svg";
+function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function ico(name, cls) { var s = document.createElementNS(NS, "svg"); s.setAttribute("class", "icon " + (cls || "")); s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false"); var u = document.createElementNS(NS, "use"); u.setAttribute("href", "#i-" + name); s.appendChild(u); return s; }
+function kids(p) { for (var i = 1; i < arguments.length; i++) if (arguments[i]) p.appendChild(arguments[i]); return p; }
+function $(id) { return document.getElementById(id); }
+function toast(msg) {
+  var t = h("div", "toast"); kids(t, ico("check-circle"), h("span", "", msg)); $("toasts").appendChild(t);
+  setTimeout(function () { t.classList.add("toast--out"); setTimeout(function () { t.remove(); }, 200); }, 3000);
+}
+var NOW = 23 * 60 + 16;
+function hhmm(m) { m = ((m % 1440) + 1440) % 1440; var a = Math.floor(m / 60), b = m % 60; return (a < 10 ? "0" : "") + a + ":" + (b < 10 ? "0" : "") + b; }
+function mmss(n) { var m = Math.floor(n / 60), s = n % 60; return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }
+
+/* ---------- synthetic seed data (clearly fake numbers) ---------- */
+var PRIO = { 1: "Critical", 2: "High", 3: "Medium", 4: "Routine" };
+var STATUS = { "new": "New", accepted: "Accepted", referred: "Referred", escalated: "Escalated", closed: "Closed" };
+var CASES = [
+  { id: "k1", door: "crime", ref: "KZN-UML-2026-00478", title: "Armed robbery", place: "Umlazi, Section V", prio: 1, age: 14, status: "new", name: "Nomvula Dlamini", mobile: "082 555 0143", addr: "V1234 Mbokodo Road, Umlazi", lat: -29.9689, lon: 30.8786, acc: 40, channel: "Written report with profile", text: "Two men with a firearm took my phone and bag outside the spaza shop. They ran towards the taxi rank. I am not hurt." },
+  { id: "k2", door: "crime", ref: "KZN-DBN-2026-00480", title: "Vehicle hijacking", place: "Durban Central, Point Rd", prio: 1, age: 3, status: "new", name: "Sipho Naidoo", mobile: "083 555 0187", addr: "Not given", lat: -29.8587, lon: 31.0218, acc: 25, channel: "Written report with profile", text: "White Polo hijacked at the robot on Point Road, three men, one armed. Went towards the beachfront." },
+  { id: "k3", door: "crime", ref: "KZN-CHT-2026-00476", title: "Shots fired", place: "Chatsworth, Unit 2", prio: 1, age: 22, status: "accepted", officer: "OP-12", name: "Not given", mobile: "Not given", addr: "Not given", lat: -29.9167, lon: 30.9, acc: 120, channel: "Written report, no profile", text: "Heard about five gunshots near the Unit 2 shops. People running. Nobody visible hurt." },
+  { id: "k4", door: "crime", ref: "KZN-PTN-2026-00481", title: "House break-in", place: "Pinetown, Kloof Rd", prio: 2, age: 9, status: "accepted", officer: "OP-12", name: "Thandi Mkhize", mobile: "071 555 0112", addr: "14 Kloof Road, Pinetown", lat: -29.8167, lon: 30.8667, acc: 30, channel: "Written report with profile", text: "Back window forced while we were at church. TV and laptop gone. Neighbour saw a white bakkie." },
+  { id: "k5", door: "crime", ref: "KZN-INA-2026-00474", title: "Suspicious vehicle", place: "Inanda, Newtown", prio: 4, age: 27, status: "new", name: "Not given", mobile: "Not given", addr: "Not given", lat: -29.7, lon: 30.95, acc: 200, channel: "Written report, no profile", text: "Grey Quantum parked at the school gate since morning, men sitting inside." },
+  { id: "k6", door: "crime", ref: "KZN-PMB-2026-00470", title: "Theft from vehicle", place: "Pietermaritzburg, Church St", prio: 3, age: 41, status: "referred", officer: "OP-12", name: "Lungile Zondi", mobile: "072 555 0166", addr: "Not given", lat: -29.6006, lon: 30.3794, acc: 35, channel: "Written report with profile", text: "Window smashed and bag taken from the car outside the library. Referred to the Pietermaritzburg detective unit." },
+  { id: "c20", door: "calls", ref: "KZN-PTN-2026-00477", title: "Voice call", place: "Pinetown", prio: 2, age: 8, status: "accepted", officer: "OP-12", name: "Not given", mobile: "Withheld", addr: "Not given", lat: -29.8167, lon: 30.8667, acc: 90, channel: "Voice call, ended 04:12", call: true, transcript: [["op", "SAPS KZN control room, operator OP-12. Are you safe to talk?"], ["you", "My neighbour is being assaulted in the yard."], ["op", "Stay inside. A unit is being advised. Can you see a weapon?"], ["you", "No. Just two men and they are shouting."]] },
+  { id: "c21", door: "calls", ref: "KZN-CHT-2026-00479", title: "Video call dropped", place: "Chatsworth", prio: 2, age: 17, status: "new", name: "Zodwa Pillay", mobile: "084 555 0129", addr: "Unit 6, Chatsworth", lat: -29.9167, lon: 30.9, acc: 60, channel: "Video call, connection lost at 00:31", call: true, transcript: [["you", "Please send someone, my husband is outside the gate."], ["op", "I can hear you. Are you in a safe room?"]] },
+  { id: "g1", door: "gbv", ref: "KZN-INA-2026-00479", title: "GBV request", place: "Inanda (suburb level)", prio: 1, age: 6, status: "new", restricted: true, name: "Busisiwe Ndlovu", mobile: "078 555 0150", addr: "Withheld at list level", lat: -29.7, lon: 30.95, acc: 800, channel: "App, triage form", consent: "Yes",
+    answers: [["Safe right now", "No, not safe"], ["Contact", "OK to call"], ["Needs", "Social worker, medical care"], ["Knows who did this", "Not now"]] },
+  { id: "g2", door: "gbv", ref: "KZN-PTN-2026-00472", title: "GBV request (weather cover)", place: "Pinetown (suburb level)", prio: 1, age: 18, status: "accepted", officer: "OP-12", restricted: true, name: "Anele Mthembu", mobile: "060 555 0138", addr: "Withheld at list level", lat: -29.8167, lon: 30.8667, acc: 800, channel: "Weather cover, friend notified", consent: "Yes",
+    answers: [["Safe right now", "Not sure"], ["Contact", "SMS only"], ["Needs", "Transport to safety"], ["Knows who did this", "Yes"]] },
+  { id: "g3", door: "gbv", ref: "KZN-CHT-2026-00465", title: "GBV request", place: "Chatsworth (suburb level)", prio: 2, age: 64, status: "referred", officer: "OP-12", restricted: true, name: "Nokuthula Reddy", mobile: "082 555 0194", addr: "Withheld at list level", lat: -29.9167, lon: 30.9, acc: 800, channel: "App, triage form", consent: "No",
+    answers: [["Safe right now", "Yes, I can talk"], ["Contact", "Do not contact"], ["Needs", "Someone to talk to"], ["Knows who did this", "No"]] },
+  { id: "a1", door: "anon", ref: "KZN-ANO-2026-00117", title: "Armed group seen", place: "Inanda, Newtown", prio: 1, age: 11, status: "new", restricted: true, channel: "Anonymous tip, no identity", lat: -29.7, lon: 30.95, acc: 500, text: "Five men with long guns loading a white van behind the old hall around 22:30. They were speaking about a job tomorrow morning." },
+  { id: "a2", door: "anon", ref: "KZN-ANO-2026-00115", title: "Illegal firearms trade", place: "Umlazi, Section K", prio: 2, age: 52, status: "new", restricted: true, channel: "Anonymous tip, no identity", lat: -29.9689, lon: 30.8786, acc: 500, text: "Guns being sold from a garage on weekends. Buyers come in taxis from the rank." },
+  { id: "a3", door: "anon", ref: "KZN-ANO-2026-00113", title: "Suspicious activity", place: "Empangeni, taxi rank", prio: 3, age: 95, status: "accepted", officer: "OP-12", restricted: true, channel: "Anonymous tip, no identity", lat: -28.75, lon: 31.9, acc: 500, text: "Same two cars every evening, men exchanging parcels at the back of the rank." },
+  { id: "a4", door: "anon", ref: "KZN-ANO-2026-00110", title: "Stolen goods storage", place: "Chatsworth, Unit 9", prio: 3, age: 140, status: "new", restricted: true, channel: "Anonymous tip, no identity", lat: -29.9167, lon: 30.9, acc: 500, text: "Shipping container behind the tuck shop is full of new TVs and fridges." }
+];
+var DOORLABEL = { calls: "Calls", crime: "Crime", gbv: "GBV", anon: "Anonymous" };
+var state = { door: "calls", filter: "all", sel: null, offline: false, loading: false };
+var extraEvents = {};   // actions taken in this session, per case id
+
+function byId(id) { for (var i = 0; i < CASES.length; i++) if (CASES[i].id === id) return CASES[i]; }
+function ageClass(c) { return c.age >= 20 ? "age--late" : c.age >= 10 ? "age--warn" : ""; }
+
+/* ---------- queue ---------- */
+function visible() {
+  var l = CASES.filter(function (c) { return c.door === state.door; });
+  if (state.filter === "new") l = l.filter(function (c) { return c.status === "new"; });
+  if (state.filter === "mine") l = l.filter(function (c) { return c.officer === "OP-12"; });
+  return l.sort(function (a, b) { return (a.status === "closed") - (b.status === "closed") || a.prio - b.prio || b.age - a.age; });
+}
+function counts() {
+  ["calls", "crime", "gbv", "anon"].forEach(function (d) {
+    var n = CASES.filter(function (c) { return c.door === d && c.status !== "closed"; }).length;
+    $("n-" + d).textContent = n;
+  });
+}
+function renderQueue() {
+  var ul = $("queue"); ul.textContent = "";
+  if (state.loading) { for (var i = 0; i < 6; i++) ul.appendChild(h("li", "", "")).appendChild(h("span", "skeleton skeleton--row")); $("stats").textContent = "Loading queue…"; return; }
+  var list = visible();
+  var open = CASES.filter(function (c) { return c.door === state.door && c.status !== "closed"; });
+  var oldest = open.reduce(function (m, c) { return Math.max(m, c.age); }, 0);
+  var st = $("stats"); st.textContent = "";
+  kids(st, h("span", "", ""), h("span", ""));
+  st.firstChild.appendChild(h("b", "", String(open.length))); st.firstChild.appendChild(document.createTextNode(" open"));
+  st.lastChild.appendChild(document.createTextNode("oldest ")); st.lastChild.appendChild(h("b", "", oldest + " min"));
+  if (!list.length) {
+    var li = h("li", "queue-empty"); var s = h("div", "state");
+    kids(s, kids(h("span", "state__icon"), ico("inbox", "icon--lg")), h("p", "state__title", "Nothing here"), h("p", "state__text", "No cases match this filter. New items appear here by themselves."));
+    ul.appendChild(kids(li, s)); return;
+  }
+  list.forEach(function (c) {
+    var li = h("li"); var b = h("button", "queue-row queue-row--p" + c.prio); b.type = "button"; b.setAttribute("data-id", c.id);
+    if (state.sel === c.id) b.setAttribute("aria-current", "true");
+    var main = h("span", "queue-row__main");
+    var title = h("span", "queue-row__title");
+    kids(title, ico(c.call ? "phone" : c.door === "gbv" ? "heart" : c.door === "anon" ? "eye-off" : "alert"), document.createTextNode(c.title));
+    if (c.restricted) title.appendChild(ico("lock", "icon--sm"));
+    var meta = h("span", "queue-row__meta");
+    kids(meta, h("span", "", c.place));
+    var meta2 = h("span", "queue-row__meta"); kids(meta2, h("span", "ref", c.ref), h("span", "chip chip--dot chip--" + c.status, STATUS[c.status]));
+    kids(main, title, meta, meta2);
+    var side = h("span", "queue-row__side");
+    kids(side, h("span", "prio prio--" + c.prio, "P" + c.prio));
+    if (c.status !== "closed") { var a = h("span", "age " + ageClass(c)); a.appendChild(document.createTextNode(String(c.age))); a.appendChild(h("span", "age__unit", "min")); a.setAttribute("aria-label", "waiting " + c.age + " minutes" + (c.age >= 20 ? ", overdue" : "")); side.appendChild(a); }
+    kids(b, main, side); ul.appendChild(kids(li, b));
+  });
+}
+
+/* ---------- case file ---------- */
+function eventsFor(c) {
+  var t0 = NOW - c.age, ev = [[hhmm(t0), "Received", c.channel + ".", "done"]];
+  if (!c.restricted || c.door === "gbv") ev.push([hhmm(t0), "Location attached", "Accuracy about " + c.acc + " m" + (c.door === "anon" ? " (area only)" : "") + ".", "done"]);
+  if (c.call) ev.push([hhmm(t0), "Call connected", "Live captions are saved to the case.", "done"]);
+  if (c.status !== "new") ev.push([hhmm(t0 + Math.min(3, c.age)), "Accepted", "By " + (c.officer || "OP-12") + ".", "done"]);
+  if (c.status === "referred") ev.push([hhmm(t0 + Math.min(8, c.age)), "Referred", "Passed on. Waiting for acknowledgement.", "done"]);
+  (extraEvents[c.id] || []).forEach(function (e) { ev.push(e); });
+  return ev;
+}
+function card(titleText, eyebrow) {
+  var c = h("section", "card card--tight"); var head = h("div", "card__head");
+  kids(head, h("h3", "card__title", titleText)); if (eyebrow) head.appendChild(eyebrow); c.appendChild(head); return c;
+}
+function kv(rows) { var d = h("dl", "kv"); rows.forEach(function (r) { d.appendChild(h("dt", "", r[0])); d.appendChild(h("dd", "", r[1])); }); return d; }
+
+var map = null, marker = null, circle = null, mapOk = false;
+function drawMap(el, c) {
+  if (!mapOk || !window.L) { el.appendChild(fallbackMap(c)); return; }
+  map = L.map(el, { zoomControl: true, attributionControl: true, scrollWheelZoom: false }).setView([c.lat, c.lon], c.acc > 300 ? 13 : 15);
+  var tl = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+  var loaded = false, errs = 0;
+  tl.on("tileload", function () { loaded = true; }); tl.on("tileerror", function () { errs++; if (!loaded && errs > 3) { map.remove(); map = null; el.textContent = ""; el.appendChild(fallbackMap(c)); } });
+  circle = L.circle([c.lat, c.lon], { radius: c.acc, color: "#e3b94f", weight: 1.5, fillColor: "#e3b94f", fillOpacity: 0.16 }).addTo(map);
+  marker = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "", html: '<div class="pin pin--case" style="width:26px;height:26px"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(map);
+}
+function fallbackMap(c) {
+  var w = h("div", "map__fallback"); w.setAttribute("role", "img"); w.setAttribute("aria-label", "Static location view for " + c.place);
+  w.innerHTML = '<svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="200" fill="none"/><g stroke="currentColor" stroke-opacity=".18" stroke-width="1.5" fill="none" style="color:var(--color-text)"><path d="M0 60h320M0 130h320M70 0v200M170 0v200M250 0v200M0 20l320 160" /></g><circle cx="170" cy="96" r="34" fill="#e3b94f" fill-opacity=".16" stroke="#e3b94f"/><circle cx="170" cy="96" r="9" fill="#c9291a" stroke="#fff" stroke-width="3"/></svg>';
+  return w;
+}
+function renderCase() {
+  var root = $("casefile"); root.textContent = ""; if (map) { map.remove(); map = null; }
+  var c = byId(state.sel);
+  if (!c) { var s = h("div", "state"); kids(s, kids(h("span", "state__icon"), ico("file", "icon--lg")), h("p", "state__title", "Select a case"), h("p", "state__text", "Choose an item from the queue to open its file.")); root.appendChild(s); return; }
+  var head = h("div", "casefile__head");
+  kids(head, h("span", "ref casefile__ref", c.ref), h("h1", "casefile__title", c.title + ", " + c.place.split(",")[0].replace(" (suburb level)", "")));
+  var chips = h("div", "cluster");
+  kids(chips, h("span", "prio prio--" + c.prio, "P" + c.prio + " " + PRIO[c.prio]), h("span", "chip chip--dot chip--" + c.status, STATUS[c.status]));
+  if (c.restricted) { var r = h("span", "restricted"); kids(r, ico("lock"), document.createTextNode("Restricted record - access logged")); chips.appendChild(r); }
+  chips.appendChild(h("span", "muted text-sm", "Received " + hhmm(NOW - c.age) + (c.status !== "closed" ? " · " + c.age + " min ago" : "")));
+  head.appendChild(chips); root.appendChild(head);
+
+  /* action bar: Accept / Refer / Escalate / Close */
+  var wrap = h("div", "actions-wrap"); var bar = h("div", "action-bar"); bar.setAttribute("role", "group"); bar.setAttribute("aria-label", "Case actions");
+  var closed = c.status === "closed";
+  function ab(label, icon, cls, fn, dis) { var b = h("button", "btn " + cls); b.type = "button"; kids(b, ico(icon), document.createTextNode(label)); if (dis) { b.disabled = true; } b.addEventListener("click", fn); return b; }
+  kids(bar,
+    ab("Accept", "check", "btn--primary", function () { act(c, "accept"); }, closed || c.status !== "new"),
+    ab("Refer", "referral", "btn--secondary", function () { act(c, "refer"); }, closed),
+    ab("Escalate", "escalate", "btn--secondary", function () { act(c, "escalate"); }, closed || c.status === "escalated"),
+    ab("Close", "close", "btn--secondary", function () { act(c, "close"); }, closed));
+  wrap.appendChild(bar); root.appendChild(wrap);
+
+  var grid = h("div", "casefile__grid"), left = h("div", "casefile__col"), right = h("div", "casefile__col");
+
+  /* person */
+  var pc = card("Person");
+  if (c.door === "anon") {
+    var lb = h("div", "lockbox"); kids(lb, ico("eye-off", "icon--lg"), h("strong", "", "No identity held"), h("p", "", "This tip was sent anonymously. No name, number, photo or device ID exists in this record, by design."));
+    pc.appendChild(lb);
+  } else if (c.restricted && !c.opened) {
+    var lb2 = h("div", "lockbox"); var ob = h("button", "btn btn--secondary"); ob.type = "button"; kids(ob, ico("lock"), document.createTextNode("Open restricted record"));
+    ob.addEventListener("click", function () { c.opened = true; (extraEvents[c.id] = extraEvents[c.id] || []).push([hhmm(NOW), "Record opened", "By OP-12. Access logged.", "done"]); toast("Record opened. Access has been logged."); renderCase(); });
+    kids(lb2, ico("lock", "icon--lg"), h("strong", "", "Name and number are hidden"), h("p", "", "Opening this record is logged with your officer ID and the time. Open it only to act on it."), ob);
+    pc.appendChild(lb2);
+  } else {
+    var pr = h("div", "person"); var av = h("div", "avatar"); av.setAttribute("role", "img"); av.setAttribute("aria-label", "Profile photo placeholder"); av.appendChild(ico("user"));
+    var pn = h("div", ""); kids(pn, h("p", "person__name", c.name), h("p", "muted text-sm", c.name === "Not given" ? "No profile on this report" : "Profile photo taken on the citizen's phone"));
+    kids(pr, av, pn); pc.appendChild(pr);
+    var k = h("div", ""); k.style.marginTop = "var(--space-4)";
+    k.appendChild(kv([["Mobile", c.mobile], ["Address", c.addr], ["Channel", c.channel]].concat(c.consent ? [["Share contact with partner", "Citizen agreed: " + c.consent]] : [])));
+    pc.appendChild(k);
+  }
+  left.appendChild(pc);
+
+  /* location */
+  var lc = card("Location"); var mp = h("div", "map map--small"); var cv = h("div", "map__canvas"); mp.appendChild(cv); lc.appendChild(mp);
+  lc.appendChild(h("p", "muted text-sm", c.place + " · about " + c.acc + " m" + (c.restricted ? " (area only for restricted records)" : ""))).style.marginTop = "var(--space-3)";
+  left.appendChild(lc);
+
+  /* timeline */
+  var tc = card("Timeline"); var ol = h("ol", "timeline timeline--compact");
+  eventsFor(c).forEach(function (e, i, a) {
+    var li = h("li", "timeline__item timeline__item--done" + (e[4] === "new" ? " timeline__item--new" : ""));
+    var d = h("span", "timeline__dot"); d.appendChild(ico("check")); li.appendChild(d);
+    kids(li, h("span", "timeline__time", e[0]), h("span", "timeline__title", e[1]), h("span", "timeline__text", e[2])); ol.appendChild(li);
+  });
+  tc.appendChild(ol); right.appendChild(tc);
+
+  /* transcript / written report / answers */
+  var xc;
+  if (c.call) {
+    xc = card("Transcript", h("span", "chip chip--neutral", "Live captions, simulated"));
+    var tr = h("div", "transcript"); var ul = h("ul", "transcript__list"); ul.id = "tlist"; ul.setAttribute("role", "log"); ul.setAttribute("aria-live", "polite");
+    (c.transcript || []).forEach(function (l) { ul.appendChild(line(l[0], l[1])); });
+    if (!(c.transcript || []).length) ul.appendChild(h("li", "transcript__empty", "Captions will appear here once the call is answered."));
+    tr.appendChild(ul); xc.appendChild(tr);
+  } else if (c.answers) {
+    xc = card("Citizen's answers", h("span", "chip chip--neutral", "Triage form"));
+    var al = h("ul", "answers"); c.answers.forEach(function (a) { var li = h("li"); kids(li, h("span", "", a[0]), h("span", "", a[1])); al.appendChild(li); });
+    xc.appendChild(al);
+    xc.appendChild(h("p", "muted text-sm", "Believe the person. Do not ask them to repeat what they have already shared. Ask about who did this only if they choose to say.")).style.marginTop = "var(--space-3)";
+  } else {
+    xc = card(c.door === "anon" ? "Tip text" : "Written report", h("span", "chip chip--neutral", "Typed by the citizen"));
+    xc.appendChild(h("p", "", c.text));
+  }
+  right.appendChild(xc);
+  kids(grid, left, right); root.appendChild(grid);
+  drawMap(cv, c);
+}
+function line(who, text) {
+  var li = h("li", "transcript__line" + (who === "you" ? " transcript__line--you" : ""));
+  return kids(li, h("span", "transcript__who", who === "you" ? "Caller" : "Operator OP-12"), h("span", "transcript__text", text));
+}
+
+/* ---------- actions ---------- */
+var pending = null;
+var dlg = $("act-dlg");
+function act(c, kind) {
+  if (kind === "accept") { c.status = "accepted"; c.officer = "OP-12"; push(c, "Accepted", "By OP-12."); toast(c.ref + " accepted"); refresh(); return; }
+  pending = { c: c, kind: kind }; var sel = $("act-select"), fld = $("act-field"); sel.textContent = ""; fld.hidden = false;
+  if (kind === "refer") {
+    $("act-title").textContent = "Refer this case"; $("act-body").textContent = "Pass it to the right service. You stay the owner until they acknowledge.";
+    $("act-label").textContent = "Refer to"; ["Social worker", "Thuthuzela Care Centre (nearest)", "Clinic or hospital", "Station detective unit", "Municipality (unsafe infrastructure)"].forEach(function (o) { sel.appendChild(h("option", "", o)); });
+    $("act-hint").textContent = c.consent ? "Contact details are shared only if the citizen agreed. This citizen: " + c.consent + ". Demo: nothing is dispatched." : "Demo: nothing is dispatched.";
+    $("act-ok").textContent = "Refer case";
+  } else if (kind === "escalate") {
+    $("act-title").textContent = "Escalate to senior leadership"; $("act-body").textContent = "This puts " + c.ref + " at the top of the Commissioner's board straight away. " + (c.door === "anon" ? "The tip carries no identity." : "Names and numbers never reach the board.");
+    fld.hidden = true; $("act-ok").textContent = "Escalate now";
+  } else {
+    $("act-title").textContent = "Close this case"; $("act-body").textContent = "Closing removes it from the queue. The file and timeline stay on record.";
+    $("act-label").textContent = "Outcome"; ["Resolved", "No further action", "Duplicate of another report", "Referred and acknowledged"].forEach(function (o) { sel.appendChild(h("option", "", o)); });
+    $("act-hint").textContent = ""; $("act-ok").textContent = "Close case";
+  }
+  dlg.showModal();
+}
+$("act-cancel").addEventListener("click", function () { dlg.close(); pending = null; });
+$("act-form").addEventListener("submit", function (e) {
+  e.preventDefault(); if (!pending) return; var c = pending.c, k = pending.kind, v = $("act-select").value; dlg.close();
+  if (k === "refer") { c.status = "referred"; push(c, "Referred", "To " + v + ". Demo: nothing dispatched."); toast("Referred to " + v); }
+  if (k === "escalate") { c.status = "escalated"; push(c, "Escalated", "To senior leadership by OP-12."); toast(c.ref + " is now on the leadership board"); }
+  if (k === "close") { c.status = "closed"; push(c, "Closed", "Outcome: " + v + "."); toast(c.ref + " closed"); }
+  pending = null; refresh();
+});
+function push(c, t, x) { (extraEvents[c.id] = extraEvents[c.id] || []).push([hhmm(NOW), t, x, "done", "new"]); }
+function refresh() { counts(); renderQueue(); renderCase(); }
+
+/* ---------- selection, doors ---------- */
+function select(id) { state.sel = id; renderQueue(); renderCase(); }
+$("queue").addEventListener("click", function (e) { var b = e.target.closest(".queue-row"); if (b) { select(b.getAttribute("data-id")); } });
+function setDoor(d, focus) {
+  state.door = d; state.filter = "all";
+  document.querySelectorAll("#doors [role=tab]").forEach(function (t) { var on = t.getAttribute("data-door") === d; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+  document.querySelectorAll("#qfilter button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-f") === "all")); });
+  var l = visible(); state.sel = l.length ? l[0].id : null; renderQueue(); renderCase();
+}
+document.querySelectorAll("#doors [role=tab]").forEach(function (t) { t.addEventListener("click", function () { setDoor(t.getAttribute("data-door")); }); });
+$("doors").addEventListener("keydown", function (e) {
+  var order = ["calls", "crime", "gbv", "anon"], i = order.indexOf(state.door);
+  if (e.key === "ArrowRight") { e.preventDefault(); setDoor(order[(i + 1) % 4], true); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); setDoor(order[(i + 3) % 4], true); }
+});
+document.querySelectorAll("#qfilter button").forEach(function (b) { b.addEventListener("click", function () {
+  state.filter = b.getAttribute("data-f"); document.querySelectorAll("#qfilter button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+  var l = visible(); state.sel = l.length ? l[0].id : null; renderQueue(); renderCase(); }); });
+$("alerts").addEventListener("click", function () { var on = $("alerts").getAttribute("aria-pressed") !== "true"; $("alerts").setAttribute("aria-pressed", String(on)); $("alerts-l").textContent = on ? "Alerts on" : "Alerts off"; });
+
+/* ---------- incoming call ---------- */
+var TM = $("in-timer");
+var inc = { state: "ringing", t: 8, tick: null, timers: [] };
+function beep() {
+  if ($("alerts").getAttribute("aria-pressed") !== "true") return;
+  try { var ctx = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.28].forEach(function (d) { var o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 880; g.gain.value = 0.06; o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.16); }); } catch (e) {}
+}
+function incomingRing(sound) {
+  clearInterval(inc.tick); inc.timers.forEach(clearTimeout); inc.timers = []; inc.state = "ringing"; inc.t = 8;
+  var el = $("incoming"); el.className = "incoming-call"; $("incoming-wrap").hidden = false;
+  $("in-tag-t").textContent = "Incoming emergency call"; $("in-tag").firstElementChild.firstElementChild.setAttribute("href", "#i-alert"); $("in-name").textContent = "Nomvula Dlamini"; $("in-icon").setAttribute("href", "#i-phone");
+  TM.textContent = mmss(inc.t); TM.className = "incoming-call__timer num"; TM.setAttribute("aria-label", "Waiting time");
+  var acts = $("in-actions"); acts.textContent = ""; kids(acts, TM, mkAnswer(), mkPass());
+  inc.tick = setInterval(function () { inc.t++; TM.textContent = mmss(inc.t); }, 1000);
+  if (sound) beep();
+}
+function mkAnswer() { var b = h("button", "btn btn--answer btn--lg btn--block"); b.id = "answer"; b.type = "button"; kids(b, ico("phone"), document.createTextNode("ANSWER")); b.addEventListener("click", answer); return b; }
+function mkPass() { var b = h("button", "btn btn--secondary btn--block", "Pass to next operator"); b.id = "pass"; b.type = "button"; b.addEventListener("click", function () { clearInterval(inc.tick); $("incoming-wrap").hidden = true; toast("Passed to the next operator"); }); return b; }
+var SCRIPT = [["op", "SAPS KZN control room, operator OP-12. Are you safe to talk?"], ["you", "I need help. Two men are at the gate."], ["op", "I can see your approximate location in Umlazi. Stay inside. Is anyone hurt?"], ["you", "No. I cannot speak freely."]];
+function answer() {
+  clearInterval(inc.tick); inc.state = "active"; inc.t = 0;
+  var c = byId("c0"); if (!c) { c = { id: "c0", door: "calls", ref: "KZN-UML-2026-00482", title: "Video call", place: "Umlazi, Section V", prio: 1, age: 0, status: "accepted", officer: "OP-12", name: "Nomvula Dlamini", mobile: "082 555 0143", addr: "V1234 Mbokodo Road, Umlazi", lat: -29.9689, lon: 30.8786, acc: 40, channel: "Video call, profile attached", call: true, transcript: [] }; CASES.push(c); }
+  c.transcript = []; extraEvents.c0 = [[hhmm(NOW), "Answered", "By OP-12 after " + mmss(8 + 3) + ".", "done"]];
+  var el = $("incoming"); el.className = "incoming-call incoming-call--active"; $("in-tag-t").textContent = "On call"; $("in-icon").setAttribute("href", "#i-phone"); $("in-tag").firstElementChild.firstElementChild.setAttribute("href", "#i-phone");
+  var acts = $("in-actions"); acts.textContent = ""; TM.textContent = "00:00"; TM.setAttribute("aria-label", "Call time");
+  var ctl = h("div", "call-controls--inline call-controls"); ctl.style.display = "flex";
+  function cb(icon, label, pressable) { var b = h("button", "call-btn" + (label === "End call" ? " call-btn--end" : "")); b.type = "button"; var d = h("span", "call-btn__disc"); d.appendChild(ico(icon)); b.appendChild(d); b.setAttribute("aria-label", label); if (pressable) { b.setAttribute("aria-pressed", "false"); b.addEventListener("click", function () { b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); }); } return b; }
+  var end = cb("end-call", "End call", false); end.addEventListener("click", endCall);
+  kids(ctl, cb("mic", "Mute microphone", true), cb("camera", "Camera", true), end);
+  kids(acts, TM, ctl);
+  inc.tick = setInterval(function () { inc.t++; TM.textContent = mmss(inc.t); }, 1000);
+  setDoor("calls"); select("c0");
+  SCRIPT.forEach(function (l, i) { inc.timers.push(setTimeout(function () {
+    c.transcript.push(l); var u = $("tlist"); if (u) { var em = u.querySelector(".transcript__empty"); if (em) em.remove(); u.appendChild(line(l[0], l[1])); u.scrollTop = u.scrollHeight; }
+  }, 900 + i * 2400)); });
+}
+function endCall() {
+  clearInterval(inc.tick); inc.timers.forEach(clearTimeout); inc.state = "ended";
+  var c = byId("c0"); (extraEvents.c0 = extraEvents.c0 || []).push([hhmm(NOW + 1), "Call ended", "Duration " + mmss(inc.t) + ". Captions saved to the case.", "done", "new"]);
+  $("in-tag-t").textContent = "Call ended"; $("incoming").className = "incoming-call incoming-call--active";
+  var acts = $("in-actions"); acts.textContent = ""; var b = h("button", "btn btn--secondary btn--block", "Dismiss"); b.type = "button"; b.addEventListener("click", function () { $("incoming-wrap").hidden = true; }); acts.appendChild(b);
+  toast("Call ended. Captions saved to the case."); counts(); renderQueue(); renderCase();
+}
+
+/* ---------- Leaflet loader (graceful static fallback if CDN or tiles are unreachable) ---------- */
+function loadLeaflet(cb) {
+  var css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(css);
+  var s = document.createElement("script"); s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload = function () { cb(true); }; s.onerror = function () { cb(false); };
+  document.head.appendChild(s); setTimeout(function () { if (!window.L) cb(false); }, 5000);
+}
+
+/* ---------- offline / loading demo states ---------- */
+function setOffline(on) {
+  state.offline = on; var slot = $("error-slot"); slot.textContent = "";
+  if (on) { var b = h("div", "banner banner--danger"); kids(b, ico("alert"), kids(h("div"), h("span", "banner__title", "Cannot reach the server"), h("span", "", "You are seeing the last queue received at 23:14. New cases will appear when the connection returns. Phone the control room supervisor if a call is waiting."))); b.setAttribute("role", "alert"); slot.appendChild(b); }
+}
+$("r-error").addEventListener("click", function () { var on = $("r-error").getAttribute("aria-pressed") !== "true"; $("r-error").setAttribute("aria-pressed", String(on)); setOffline(on); });
+$("r-incoming").addEventListener("click", function () { incomingRing(true); });
+function load(ms) { state.loading = true; renderQueue(); setTimeout(function () { state.loading = false; renderQueue(); }, ms); }
+$("r-load").addEventListener("click", function () { load(1400); });
+
+document.querySelector(".mock-rail__toggle").addEventListener("click", function () { var r = this.closest(".mock-rail"); var c = r.classList.toggle("is-collapsed"); this.setAttribute("aria-expanded", String(!c)); this.firstElementChild.textContent = c ? "Mockup controls +" : "Mockup controls -"; });
+function setChromeH() { document.documentElement.style.setProperty("--chrome-h", $("chrome").offsetHeight + "px"); }
+window.addEventListener("resize", setChromeH);
+
+/* ---------- boot ---------- */
+var qs = new URLSearchParams(location.search);
+setChromeH(); counts(); incomingRing(false); $("answer").addEventListener("click", answer);
+setDoor(qs.get("door") || "crime");
+loadLeaflet(function (ok) { if (mapOk === ok) return; mapOk = ok; if (state.sel) renderCase(); });
+load(500);
+if (qs.has("answered")) answer();
+if (qs.has("offline")) { setOffline(true); $("r-error").setAttribute("aria-pressed", "true"); }
+</script>
+</body>
+</html>

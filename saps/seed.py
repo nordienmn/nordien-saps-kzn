@@ -5,8 +5,11 @@ Names, numbers and addresses are invented. Numbers use a non-working range.
 """
 import random
 
-from . import geo, service
+from . import geo, service, taxonomy
 from .store import now
+
+GENDERS_W = [("female", 46), ("male", 44), ("other", 2), ("undisclosed", 8)]
+AGES_W = [("under_18", 6), ("18_24", 16), ("25_34", 28), ("35_49", 24), ("50_64", 12), ("65_plus", 6), ("undisclosed", 8)]
 
 HOUR, DAY = 3600, 86400
 
@@ -74,6 +77,18 @@ def _finish(store, case, rng, age, status, officer):
             c["assigned_to"] = officer
             c["first_action_at"] = c["created_at"] + rng.randint(120, 1500)
             c["timeline"].append({"at": c["first_action_at"], "actor": officer, "text": "Accepted the file.", "kind": "action"})
+            # most attended files have a station deployed; some are still on the way or on scene
+            if c["kind"] in ("crime", "gbv", "sos") and rng.random() < 0.75 and c["lat"] is not None:
+                station = geo.nearest_station(c["lat"], c["lon"])
+                disp = c["first_action_at"] + rng.randint(30, 600)
+                arrived = disp + rng.randint(420, 2700) if (status == "closed" or age > 3 * HOUR) else None
+                cleared = arrived + rng.randint(900, 5400) if (arrived and status == "closed") else None
+                unit = "FCS unit" if c["kind"] == "gbv" else rng.choice(["Patrol vehicle", "Patrol vehicle", "Patrol vehicle", "Flying Squad", "Detective"])
+                dep = {"id": f"D9{rng.randint(1000, 9999)}", "station": station, "station_name": geo.station_name(station), "unit": unit,
+                       "status": "cleared" if cleared else ("on_scene" if arrived else "dispatched"), "dispatched_at": disp,
+                       "dispatched_by": officer, "arrived_at": arrived, "cleared_at": cleared}
+                c["deployments"].append(dep)
+                c["timeline"].append({"at": disp, "actor": officer, "text": f"{unit} dispatched from {dep['station_name']}.", "kind": "deployment"})
         if status == "closed":
             c["closed_at"] = c["created_at"] + rng.randint(2 * HOUR, 30 * HOUR)
             c["timeline"].append({"at": c["closed_at"], "actor": officer, "text": "Closed.", "kind": "action"})
@@ -101,8 +116,17 @@ def seed(store):
         case = service.create_case(store, {
             "kind": "crime", "type": key, "lat": lat, "lon": lon, "address": place,
             "name": name, "mobile": mobile, "note": NOTES[key],
+            "gender": _pick(rng, GENDERS_W), "age_band": _pick(rng, AGES_W), "lang": "zu" if rng.random() < 0.38 else "en",
         }, channel=rng.choice(["app", "app", "app", "whatsapp"]), synthetic=True, created_at=t - age)
-        status = "closed" if age > 2 * DAY and rng.random() < 0.75 else rng.choice(["new", "assigned", "in_progress", "in_progress"]) if age < 2 * DAY else "in_progress"
+        prio = taxonomy.CRIME_TYPES[key][2]
+        if age < 3 * HOUR:
+            status = rng.choice(["new", "new", "assigned", "in_progress"])
+        elif prio in ("critical", "high") and age > 4 * HOUR:
+            status = "closed" if rng.random() < 0.95 else "in_progress"  # a couple of genuinely overdue urgent files
+        elif age > 2 * DAY:
+            status = "closed" if rng.random() < 0.8 else "in_progress"
+        else:
+            status = rng.choice(["assigned", "in_progress", "in_progress", "closed"])
         _finish(store, case, rng, age, status, rng.choice(officers))
 
     # ---- unsafe infrastructure (area) reports, two already shared with the municipality
@@ -128,6 +152,7 @@ def seed(store):
         name, mobile = _person(rng, 80 + i)
         case = service.create_case(store, {
             "kind": "gbv", "safe_now": safe, "wants": wants, "contact_pref": pref, "know_person": "skip",
+            "gender": "female" if rng.random() < 0.9 else "undisclosed", "age_band": rng.choice(["under_18", "18_24", "25_34", "25_34", "35_49", "35_49", "50_64"]), "lang": "zu" if rng.random() < 0.5 else "en",
             "lat": lat, "lon": lon, "address": place, "name": name if pref != "none" else "", "mobile": mobile if pref != "none" else "",
             "note": "Help requested.",
         }, synthetic=True, created_at=t - age)
@@ -147,7 +172,7 @@ def seed(store):
     for i, (cluster, mode, age, lines) in enumerate(call_rows):
         lat, lon, place = _where(rng, cluster)
         name, mobile = _person(rng, 60 + i)
-        case = service.create_case(store, {"kind": "call", "mode": mode, "lat": lat, "lon": lon, "address": place, "name": name, "mobile": mobile}, synthetic=True, created_at=t - age)
+        case = service.create_case(store, {"kind": "call", "mode": mode, "lat": lat, "lon": lon, "address": place, "name": name, "mobile": mobile, "gender": _pick(rng, GENDERS_W), "age_band": _pick(rng, AGES_W)}, synthetic=True, created_at=t - age)
         started = t - age
         secs = rng.randint(70, 240)
 
@@ -162,24 +187,57 @@ def seed(store):
 
         store.patch("cases", case["id"], fn)
 
-    # ---- tips: three history, one new and ready for the escalation moment
+    # ---- tips. The desk's tip-off line checks each one; only verified tips are referred to HQ.
+    # HQ sees all of them (oversight), plus a short list of verified referrals that need its action.
     tip_rows = [
-        ({"type": "drugs", "lat": -29.8587, "lon": 31.0218, "address": "Point Road, Durban", "note": "Dealing from a flat on the corner."}, 3 * DAY, "closed"),
-        ({"type": "illegal_firearm", "lat": -29.6006, "lon": 30.3794, "address": "Edendale Road", "note": "A man shows a pistol at the taxi rank."}, 2 * DAY, "acknowledged"),
+        ({"type": "drugs", "lat": -29.8587, "lon": 31.0218, "address": "Point Road, Durban", "note": "Dealing from a flat on the corner."}, 3 * DAY, "closed_desk"),
+        ({"type": "illegal_firearm", "lat": -29.6006, "lon": 30.3794, "address": "Edendale Road", "note": "A man shows a pistol at the taxi rank."}, 2 * DAY, "directed"),
+        ({"type": "planned_crime", "lat": -29.7500, "lon": 30.9800, "address": "KwaMashu", "note": "Talk of a robbery at the weekend market."}, 1.2 * DAY, "acknowledged"),
         ({"type": "stolen_goods", "lat": -29.8167, "lon": 30.8667, "address": "Pinetown CBD", "note": "A house is selling new TVs very cheaply."}, 1 * DAY, "new"),
+        ({"type": "wanted_person", "lat": -29.9697, "lon": 30.8864, "address": "Umlazi V Section", "note": "A man on the wanted posters was seen at the spaza shop."}, 5 * HOUR, "verified"),
+        ({"type": "drugs", "lat": -29.7000, "lon": 31.0000, "address": "Phoenix Plaza", "note": "Regular late-night handovers behind the shops."}, 1.6 * HOUR, "referred"),
         ({"type": "suspicious_vehicle", "lat": -29.6970, "lon": 30.9460, "address": "KwaMashu Highway", "note": "White van parked near the school for three days with men inside."}, 0.3 * HOUR, "new"),
     ]
     for payload, age, status in tip_rows:
         tip, _ = service.create_tip(store, payload, synthetic=True, created_at=t - age)
-        if status in ("acknowledged", "closed"):
-            def fn(x, status=status):
-                x["status"] = status
-                x["escalated_at"] = x["created_at"] + 1800
-                x["escalated_by"] = "OP-12"
-                x["timeline"].append({"at": x["escalated_at"], "actor": "OP-12", "text": "Escalated to senior leadership.", "kind": "escalate"})
-                x["timeline"].append({"at": x["escalated_at"] + 600, "actor": "board", "text": "Acknowledged by senior leadership.", "kind": "ack"})
+        ts = tip["created_at"]
 
-            store.patch("tips", tip["id"], fn)
+        def fn(x, status=status, ts=ts):
+            def ev(at, actor, text, kind):
+                x["timeline"].append({"at": at, "actor": actor, "text": text, "kind": kind})
+
+            if status in ("closed_desk", "verified", "referred", "acknowledged", "directed"):
+                v_at = ts + 900
+                result = "not_verified" if status == "closed_desk" else "verified"
+                x["verification"] = {"result": result, "by": "OP-12", "at": v_at, "note": "Checked against known incidents and the area."}
+                ev(v_at, "OP-12", ("Verified: " if result == "verified" else "Could not verify: ") + "Checked against known incidents and the area.", "verify")
+                if result == "verified":
+                    x["status"] = "verified"
+            if status == "closed_desk":
+                x["status"], x["outcome"], x["closed_at"], x["closed_by"] = "closed", "not_verified", ts + 3600, "desk"
+                ev(ts + 3600, "OP-12", "Closed. It could not be verified.", "close")
+            if status in ("referred", "acknowledged", "directed"):
+                x["status"], x["referred_at"], x["referred_by"] = "referred", ts + 1500, "OP-12"
+                ev(ts + 1500, "OP-12", "Verified referral sent to HQ for action.", "refer")
+            if status in ("acknowledged", "directed"):
+                x["status"] = "acknowledged"
+                ev(ts + 2400, "EXEC", "Acknowledged by HQ.", "ack")
+            if status == "directed":
+                x["status"] = "directed"
+                ev(ts + 3000, "EXEC", "Directed to Provincial Crime Intelligence (demo): Gather what you can about the man and report back. Due in 120 min.", "direction")
+            x["updated_at"] = x["timeline"][-1]["at"]
+
+        store.patch("tips", tip["id"], fn)
+        if status == "directed":
+            rid = f"R{store.next_seq('referral'):05d}"
+            store.put("referrals", {
+                "id": rid, "case_id": tip["id"], "case_ref": tip["ref"], "type": "saps_intel", "partner_id": "unit-intel",
+                "partner_name": "Provincial Crime Intelligence (demo)", "status": "acknowledged", "urgency": "routine", "consent_to_share": False,
+                "note": "Gather what you can about the man and report back.", "origin": "board",
+                "instruction": "Gather what you can about the man and report back.", "created_by": "EXEC", "created_at": ts + 3000,
+                "updated_at": ts + 4000, "due_at": ts + 3000 + 7200, "sla_due_at": ts + 3000 + 7200, "synthetic": True,
+            })
+            store.patch("tips", tip["id"], lambda x, rid=rid: x["referrals"].append(rid))
 
     service.audit(store, "system", "system", "seed", "", "Synthetic demo data loaded.")
     return store

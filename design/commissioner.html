@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en" data-theme="ops" data-surface="board">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAPS KZN - Commissioner's operations board (DEMO)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../design/tokens.css">
+<link rel="stylesheet" href="../design/components.css">
+<style>
+  .board { display: grid; gap: var(--space-5); padding: var(--space-5) var(--space-6) var(--space-12); max-width: 120rem; margin-inline: auto; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-4); }
+  .kpi__value small { font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--color-text-muted); letter-spacing: 0; }
+  .main-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(22rem, 1fr); gap: var(--space-4); align-items: stretch; }
+  .map-card { display: grid; gap: var(--space-3); grid-template-rows: auto 1fr auto; }
+  .map { min-height: 30rem; }
+  .map__fallback svg { padding: var(--space-3); }
+  .feed { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .feed__list { list-style: none; overflow: auto; max-height: 36rem; }
+  .feed-item { display: grid; grid-template-columns: 3.4rem 1fr; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+  .feed-item:last-child { border-bottom: 0; }
+  .feed-item__time { font-family: var(--font-display); font-weight: var(--fw-semibold); font-size: var(--fs-md); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+  .feed-item__title { font-weight: var(--fw-semibold); line-height: 1.3; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+  .feed-item__meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; margin-top: 0.25rem; font-size: var(--fs-sm); color: var(--color-text-muted); }
+  .note-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+  .period .segmented__btn, .statusf .segmented__btn { padding-inline: var(--space-4); }
+  .app-header .live { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--fs-sm); color: var(--color-text-muted); }
+  .app-header .live i { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--color-answer); }
+  .esc-new-flash { animation: slide-in var(--dur-slow) var(--ease-out); }
+  @media (max-width: 1400px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 1180px) { .main-grid { grid-template-columns: minmax(0, 1fr); } .note-row { grid-template-columns: 1fr; } .escalations { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<!-- icon sprite: generated from icons.svg (inline so it also works from file://) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.5h2.7a1 1 0 0 1 1 .8l.7 3.2a1 1 0 0 1-.4 1l-1.6 1.2a12 12 0 0 0 5.3 5.3l1.2-1.6a1 1 0 0 1 1-.4l3.2.7a1 1 0 0 1 .8 1v2.7a2 2 0 0 1-2.1 2A15.5 15.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/></g></symbol>
+
+<symbol id="i-end-call" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 14.6c1.2-1.6 2.7-3 4.5-3.9 3.2-1.6 7.8-1.6 11 0 1.8.9 3.3 2.3 4.5 3.9a1 1 0 0 1-.1 1.3l-2.2 2a1 1 0 0 1-1.2.1l-2.5-1.5a1 1 0 0 1-.5-.9v-1.7a9.8 9.8 0 0 0-5.6 0v1.7a1 1 0 0 1-.5.9l-2.5 1.5a1 1 0 0 1-1.2-.1l-2.2-2a1 1 0 0 1-.1-1.3z"/></g></symbol>
+
+<symbol id="i-video" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5z"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/></g></symbol>
+
+<symbol id="i-video-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 5h3A2.5 2.5 0 0 1 16 7.5v3m0 3v3a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3M9 21h6"/></g></symbol>
+
+<symbol id="i-mic-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.2V6a3 3 0 0 1 6 0v5.5M15 12.6a3 3 0 0 1-5.4-1.1"/><path d="M5.5 11.5a6.5 6.5 0 0 0 10.6 5M18.5 11.5c0 .8-.1 1.5-.4 2.2"/><path d="M12 18v3M9 21h6"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></g></symbol>
+
+<symbol id="i-camera-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 5h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v7.2M17 19H5.5A1.5 1.5 0 0 1 4 17.5v-9A1.5 1.5 0 0 1 5.5 7H8"/><path d="M9.9 10.3a3.5 3.5 0 0 0 4.8 4.8"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-speaker" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.4a8 8 0 0 1 0 11.2"/></g></symbol>
+
+<symbol id="i-speaker-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></g></symbol>
+
+<symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/></g></symbol>
+
+<symbol id="i-shield-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.2-4.4"/></g></symbol>
+
+<symbol id="i-map-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></g></symbol>
+
+<symbol id="i-crosshair" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l9.2 16a1 1 0 0 1-.9 1.5H3.7a1 1 0 0 1-.9-1.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-lamp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21h5M7.5 21V8.5A4.5 4.5 0 0 1 12 4h4"/><path d="M14 4h6l-1.2 3.8h-3.6z"/><path d="M17 11v2.2M14.2 10.4l-1 1.9M19.8 10.4l1 1.9"/></g></symbol>
+
+<symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5"/><path d="M15 9h3a1 1 0 0 1 1 1v10.5"/><path d="M3 20.5h18"/><path d="M8.5 8h3M8.5 12h3M8.5 16h3"/></g></symbol>
+
+<symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6M17 14a5.5 5.5 0 0 1 3.5 5.5"/></g></symbol>
+
+<symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+
+<symbol id="i-heart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/></g></symbol>
+
+<symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.2 7.6A15.6 15.6 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.5 0 2.8-.4 4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><path d="M12 14.2v2.3"/></g></symbol>
+
+<symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></g></symbol>
+
+<symbol id="i-check-circle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.7 2.7L16.2 9.4"/></g></symbol>
+
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 5 7 7-7 7"/></g></symbol>
+
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 5-7 7 7 7"/></g></symbol>
+
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9.5 7 7 7-7"/></g></symbol>
+
+<symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+
+<symbol id="i-exit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="m14 8 4 4-4 4M18 12H9"/></g></symbol>
+
+<symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21c-2.4-2.5-3.7-5.5-3.7-9S9.6 5.5 12 3z"/></g></symbol>
+
+<symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+
+<symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></g></symbol>
+
+<symbol id="i-filter" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.2V19l-4 1.5v-8.3z"/></g></symbol>
+
+<symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21h4"/></g></symbol>
+
+<symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h8M17 7h3M4 17h3M12 17h8"/><circle cx="14.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></g></symbol>
+
+<symbol id="i-record" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-chat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5l1.2-3.6A8 8 0 1 1 8.4 18.8z"/><path d="M9 10.5h6M9 13.5h4"/></g></symbol>
+
+<symbol id="i-silent-text" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-send" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 3.5 3.5 10.5l6 2.5 2.5 6z"/><path d="M9.5 13l11-9.5"/></g></symbol>
+
+<symbol id="i-escalate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8.5M6 13.5l6-6 6 6M6 3.5h12"/></g></symbol>
+
+<symbol id="i-referral" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19v-5a5 5 0 0 1 5-5h10"/><path d="m15 4.5 4 4.5-4 4.5"/></g></symbol>
+
+<symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h6.5L19 9v10.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"/></g></symbol>
+
+<symbol id="i-inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 13.5 2.4-7.2a1 1 0 0 1 .95-.7h10.3a1 1 0 0 1 .95.7l2.4 7.2v5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z"/><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5"/></g></symbol>
+
+<symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.5-4.5 3.5 3.5 3-3 5 4.5"/></g></symbol>
+
+<symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></g></symbol>
+
+<symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.8"/><path d="M5 15.5V5.8A1 1 0 0 1 6 4.8h9.7"/></g></symbol>
+
+<symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g></symbol>
+
+<symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8z"/></g></symbol>
+
+<symbol id="i-cloud-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1.6M4.8 5.8l1.1 1.1M2.5 12.5h1.6M19.2 5.8l-1.1 1.1"/><path d="M7.2 12.6a4.3 4.3 0 0 1 8.1-1.8"/><path d="M8 20a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 10 1.38A3.3 3.3 0 0 1 17.3 20z"/></g></symbol>
+
+<symbol id="i-cloud-rain" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 7.5a4 4 0 0 1-.5 8"/><path d="M8.5 18.5l-1 2M12.5 18.5l-1 2M16.5 18.5l-1 2"/></g></symbol>
+
+<symbol id="i-wind" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.4-3.2M3 13.5h14.5a2.8 2.8 0 1 1-2.7 3.5M3 18h6"/></g></symbol>
+
+<symbol id="i-droplet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.2 6 10.5a6 6 0 0 1-12 0c0-4.3 6-10.5 6-10.5z"/></g></symbol>
+
+<symbol id="i-sunrise" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v4M7.5 5.8l1.4 1.4M16.5 5.8l-1.4 1.4"/><path d="M6.5 16a5.5 5.5 0 0 1 11 0M2.5 16h2M19.5 16h2M3.5 20h17"/></g></symbol>
+
+<symbol id="i-thermo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14.2V5a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z"/><path d="M12 9v6.5"/></g></symbol>
+
+</svg>
+
+<a class="skip-link" href="#board">Skip to the board</a>
+
+<div class="chrome" id="chrome">
+  <div class="demo-banner" role="note">
+    <span class="demo-banner__tag">Demo</span>
+    <span>Demonstration only. All figures are synthetic. No names, numbers or photos ever reach this board.</span>
+  </div>
+  <header class="app-header app-header--ops">
+    <a class="brand" href="commissioner.html" aria-label="SAPS KZN Commissioner's board">
+      <span class="brand__seal"><img src="badge.png" alt=""></span>
+      <span><span class="brand__name">SAPS KZN</span><span class="brand__sub">Provincial Commissioner &middot; Operations board</span></span>
+    </a>
+    <div class="app-header__actions">
+      <span class="live" role="status"><i aria-hidden="true"></i><span id="updated">Live &middot; updated 23:16</span></span>
+      <a class="btn btn--secondary" href="desk.html"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-users"/></svg>Control room desk</a>
+    </div>
+  </header>
+</div>
+
+<!-- ESCALATIONS: pinned at the top of the page, below the header. Slow pulse (period 2.4 s), static under reduced motion. -->
+<section class="escalations" id="esc" aria-labelledby="esc-title">
+  <div class="escalations__label">
+    <span class="escalations__title" id="esc-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-escalate"/></svg>Escalations <span class="escalations__count" id="esc-count">2</span></span>
+    <span class="escalations__hint" id="esc-hint" role="status" aria-live="polite">1 needs acknowledgement</span>
+  </div>
+  <ul class="escalations__list" id="esc-list"></ul>
+</section>
+
+<main class="board" id="board">
+
+  <section class="kpis" aria-label="Key figures" id="kpis"></section>
+
+  <form class="filter-bar" id="filters" aria-label="Filter the board" onsubmit="return false">
+    <div class="filter-bar__group period">
+      <span class="filter-bar__label" id="lbl-period">Period</span>
+      <div class="segmented" role="group" aria-labelledby="lbl-period" id="f-period">
+        <button type="button" class="segmented__btn" data-v="today" aria-pressed="true">Today</button>
+        <button type="button" class="segmented__btn" data-v="7d" aria-pressed="false">7 days</button>
+        <button type="button" class="segmented__btn" data-v="30d" aria-pressed="false">30 days</button>
+      </div>
+    </div>
+    <div class="filter-bar__group">
+      <label class="filter-bar__label" for="f-area">Area</label>
+      <select class="select select--compact" id="f-area">
+        <option value="">Whole of KwaZulu-Natal</option>
+        <optgroup label="Districts">
+          <option>eThekwini metro</option><option>uMgungundlovu</option><option>King Cetshwayo</option><option>Amajuba</option><option>Ugu</option>
+        </optgroup>
+        <optgroup label="Station areas">
+          <option>Durban Central</option><option>Umlazi</option><option>Pinetown</option><option>Inanda</option><option>Chatsworth</option>
+          <option>Pietermaritzburg</option><option>Richards Bay</option><option>Empangeni</option><option>Newcastle</option><option>Port Shepstone</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="filter-bar__group">
+      <label class="filter-bar__label" for="f-type">Crime type</label>
+      <select class="select select--compact" id="f-type">
+        <option value="">All types</option><option>Armed robbery</option><option>House break-in</option><option>Vehicle hijacking</option><option>Theft</option><option>Shooting</option>
+      </select>
+    </div>
+    <div class="filter-bar__group statusf">
+      <span class="filter-bar__label" id="lbl-status">Status</span>
+      <div class="segmented" role="group" aria-labelledby="lbl-status" id="f-status">
+        <button type="button" class="segmented__btn" data-v="" aria-pressed="true">All</button>
+        <button type="button" class="segmented__btn" data-v="open" aria-pressed="false">Open</button>
+        <button type="button" class="segmented__btn" data-v="closed" aria-pressed="false">Closed</button>
+      </div>
+    </div>
+    <span class="filter-bar__spacer"></span>
+    <button type="button" class="btn btn--ghost" id="clear"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-close"/></svg>Clear filters</button>
+  </form>
+
+  <div class="main-grid">
+    <section class="card map-card" aria-labelledby="map-title">
+      <div class="card__head" style="margin:0">
+        <h2 class="card__title" id="map-title">Where cases are</h2>
+        <span class="muted" id="showing" role="status" aria-live="polite"></span>
+      </div>
+      <div class="map" id="mapbox">
+        <div class="map__fallback" id="fallback" role="img" aria-label="Simplified outline map of KwaZulu-Natal with case counts"></div>
+        <div class="map__canvas" id="leaflet" hidden></div>
+        <div class="map__legend" aria-label="Map key">
+          <div class="map__legend-row"><span class="pin" style="width:1.1rem;height:1.1rem"></span><span>Cases in view</span></div>
+          <div class="map__legend-row"><span class="pin pin--suppressed" style="width:1.1rem;height:1.1rem"></span><span>Fewer than 5 (suppressed)</span></div>
+          <div class="map__legend-row"><span class="pin pin--alert" style="width:1.1rem;height:1.1rem"></span><span>Open escalation</span></div>
+        </div>
+      </div>
+      <p class="banner banner--neutral" style="margin:0"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span><b>Small-number suppression.</b> Areas with fewer than 5 cases show as "&lt;5" and are not placed as dots. GBV and anonymous records appear as totals only, never on the map.</span></p>
+    </section>
+
+    <section class="card feed" aria-labelledby="feed-title">
+      <div class="card__head">
+        <h2 class="card__title" id="feed-title">Latest movement</h2>
+        <span class="chip chip--neutral">No personal data</span>
+      </div>
+      <ul class="feed__list" id="feed"></ul>
+    </section>
+  </div>
+</main>
+
+<div class="toast-region" role="status" aria-live="polite" id="toasts"></div>
+
+<aside class="mock-rail is-collapsed" aria-label="Mockup controls (not part of the app)">
+  <button type="button" class="mock-rail__toggle" aria-expanded="false"><span class="mock-rail__title">Mockup controls +</span></button>
+  <div class="mock-rail__body"><div class="mock-rail__row">
+    <button type="button" id="r-new">New escalation</button>
+    <button type="button" id="r-nomap" aria-pressed="false">Show map fallback</button>
+  </div></div>
+</aside>
+
+<script>
+var NS = "http://www.w3.org/2000/svg";
+function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function ico(name, cls) { var s = document.createElementNS(NS, "svg"); s.setAttribute("class", "icon " + (cls || "")); s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false"); var u = document.createElementNS(NS, "use"); u.setAttribute("href", "#i-" + name); s.appendChild(u); return s; }
+function kids(p) { for (var i = 1; i < arguments.length; i++) if (arguments[i]) p.appendChild(arguments[i]); return p; }
+function $(id) { return document.getElementById(id); }
+function toast(msg) { var t = h("div", "toast"); kids(t, ico("check-circle"), h("span", "", msg)); $("toasts").appendChild(t); setTimeout(function () { t.classList.add("toast--out"); setTimeout(function () { t.remove(); }, 200); }, 3000); }
+
+/* ---------- synthetic data ---------- */
+var TYPES = ["Armed robbery", "House break-in", "Vehicle hijacking", "Theft", "Shooting"];
+var CL = [
+  { n: "Durban Central", d: "eThekwini metro", lat: -29.8587, lon: 31.0218, c: [9, 7, 6, 14, 3], open: 0.60, gbv: 3, anon: 2 },
+  { n: "Umlazi", d: "eThekwini metro", lat: -29.9689, lon: 30.8786, c: [11, 6, 3, 9, 5], open: 0.62, gbv: 3, anon: 2 },
+  { n: "Pinetown", d: "eThekwini metro", lat: -29.8167, lon: 30.8667, c: [4, 8, 2, 7, 1], open: 0.50, gbv: 2, anon: 1 },
+  { n: "Inanda", d: "eThekwini metro", lat: -29.7, lon: 30.95, c: [5, 3, 1, 4, 3], open: 0.70, gbv: 3, anon: 3 },
+  { n: "Chatsworth", d: "eThekwini metro", lat: -29.9167, lon: 30.9, c: [6, 5, 2, 6, 2], open: 0.55, gbv: 2, anon: 1 },
+  { n: "Pietermaritzburg", d: "uMgungundlovu", lat: -29.6006, lon: 30.3794, c: [4, 6, 3, 9, 1], open: 0.45, gbv: 2, anon: 1 },
+  { n: "Richards Bay", d: "King Cetshwayo", lat: -28.7807, lon: 32.0383, c: [1, 2, 1, 3, 0], open: 0.57, gbv: 1, anon: 0 },
+  { n: "Empangeni", d: "King Cetshwayo", lat: -28.7500, lon: 31.9000, c: [1, 1, 0, 2, 1], open: 0.60, gbv: 1, anon: 1 },
+  { n: "Newcastle", d: "Amajuba", lat: -27.7578, lon: 29.9318, c: [0, 1, 0, 2, 0], open: 0.67, gbv: 0, anon: 0 },
+  { n: "Port Shepstone", d: "Ugu", lat: -30.7414, lon: 30.4549, c: [1, 0, 0, 3, 0], open: 0.50, gbv: 1, anon: 1 }
+];
+var MULT = { today: 1, "7d": 6.3, "30d": 24.5 };
+var FEED = [
+  { t: "23:14", ref: "KZN-DBN-2026-00480", title: "Vehicle hijacking", area: "Durban Central", type: "Vehicle hijacking", st: "new" },
+  { t: "23:12", ref: "KZN-ANO-2026-00117", title: "Anonymous tip escalated", area: "Inanda", type: "", st: "escalated", r: "Anonymous tip" },
+  { t: "23:09", ref: "KZN-UML-2026-00478", title: "Armed robbery", area: "Umlazi", type: "Armed robbery", st: "new" },
+  { t: "23:06", ref: "KZN-INA-2026-00479", title: "GBV record", area: "Inanda", type: "", st: "new", r: "GBV" },
+  { t: "23:02", ref: "KZN-PTN-2026-00481", title: "House break-in", area: "Pinetown", type: "House break-in", st: "accepted" },
+  { t: "22:54", ref: "KZN-CHT-2026-00476", title: "Shooting", area: "Chatsworth", type: "Shooting", st: "escalated" },
+  { t: "22:41", ref: "KZN-PMB-2026-00470", title: "Theft", area: "Pietermaritzburg", type: "Theft", st: "referred" },
+  { t: "22:30", ref: "KZN-RCB-2026-00466", title: "House break-in", area: "Richards Bay", type: "House break-in", st: "closed" }
+];
+var ESC = [
+  { ref: "KZN-ANO-2026-00117", title: "Armed group seen, Inanda", by: "OP-12", ago: "4 min ago", r: true, ack: false },
+  { ref: "KZN-CHT-2026-00476", title: "Shooting, Chatsworth", by: "OP-07", ago: "21 min ago", r: false, ack: true }
+];
+var STATUS = { "new": "New", accepted: "Accepted", referred: "Referred", escalated: "Escalated", closed: "Closed" };
+
+/* ---------- filters (persisted in the URL hash so a view can be shared) ---------- */
+var F = { p: "today", a: "", t: "", s: "" };
+function readHash() { var m = new URLSearchParams(location.hash.slice(1)); F.p = m.get("p") || "today"; F.a = m.get("a") || ""; F.t = m.get("t") || ""; F.s = m.get("s") || ""; }
+function writeHash() { var m = new URLSearchParams(); if (F.p !== "today") m.set("p", F.p); if (F.a) m.set("a", F.a); if (F.t) m.set("t", F.t); if (F.s) m.set("s", F.s); var q = m.toString(); try { history.replaceState(null, "", location.pathname + location.search + (q ? "#" + q : "")); } catch (e) {} }
+function inArea(c) { return !F.a || c.n === F.a || c.d === F.a; }
+function stats(c) {
+  var m = MULT[F.p], total = 0;
+  TYPES.forEach(function (ty, i) { if (!F.t || F.t === ty) total += Math.round(c.c[i] * m); });
+  var open = Math.round(total * c.open), closed = total - open;
+  return { total: total, open: open, closed: closed, shown: F.s === "open" ? open : F.s === "closed" ? closed : total };
+}
+function aggregate() {
+  var A = { total: 0, open: 0, closed: 0, shown: 0, gbv: 0, anon: 0, areas: 0 };
+  CL.forEach(function (c) { if (!inArea(c)) return; var s = stats(c); A.total += s.total; A.open += s.open; A.closed += s.closed; A.shown += s.shown; A.gbv += Math.round(c.gbv * MULT[F.p]); A.anon += Math.round(c.anon * MULT[F.p]); A.areas++; });
+  return A;
+}
+function band(n) { return n < 5 ? "<5" : String(n); }
+
+/* ---------- KPI tiles ---------- */
+function kpi(label, value, sub, cls, spark) {
+  var k = h("article", "kpi " + (cls || "")); kids(k, h("h3", "kpi__label", label)); var v = h("p", "kpi__value"); if (typeof value === "string") v.textContent = value; else v.appendChild(value); k.appendChild(v);
+  if (sub) k.appendChild(sub); if (spark) k.appendChild(spark); return k;
+}
+function subtxt(t, cls) { var s = h("p", "kpi__sub"); s.appendChild(h("span", cls || "", t)); return s; }
+function spark() {
+  var s = document.createElementNS(NS, "svg"); s.setAttribute("class", "kpi__spark"); s.setAttribute("viewBox", "0 0 72 28"); s.setAttribute("aria-hidden", "true");
+  var p = document.createElementNS(NS, "polyline"); p.setAttribute("points", "0,20 12,16 24,18 36,10 48,13 60,6 72,3"); p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor"); p.setAttribute("stroke-width", "2.5"); p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round"); s.appendChild(p); return s;
+}
+function renderKpis(A) {
+  var per = F.p === "today" ? "today" : F.p === "7d" ? "in 7 days" : "in 30 days";
+  var box = $("kpis"); box.textContent = "";
+  var pct = A.total ? Math.round(A.closed * 100 / A.total) : 0;
+  var unack = ESC.filter(function (e) { return !e.ack; }).length;
+  var rs = h("span"); rs.appendChild(document.createTextNode(band(A.gbv + A.anon)));
+  kids(box,
+    kpi("Received " + per, String(A.total), subtxt(F.p === "today" ? "12 more than yesterday" : "All stations in view", F.p === "today" ? "kpi__delta--bad" : ""), "", spark()),
+    kpi("Open", String(A.open), subtxt("Still being worked"), ""),
+    kpi("Closed", String(A.closed), subtxt(pct + "% of received"), ""),
+    kpi("Median time to accept", "06:12", subtxt("Target 10:00", "kpi__delta--good"), ""),
+    kpi("Escalations", String(ESC.length), subtxt(unack ? unack + " needs acknowledgement" : "All acknowledged", unack ? "kpi__delta--bad" : "kpi__delta--good"), "kpi--alert"),
+    kpi("Restricted records", rs, (function () { var s = h("p", "kpi__sub"); var r = h("span", "restricted"); kids(r, ico("lock"), document.createTextNode("Totals only")); s.appendChild(r); return s; })(), "kpi--restricted"));
+  $("showing").textContent = "Showing " + A.shown + " case" + (A.shown === 1 ? "" : "s") + " in " + A.areas + " area" + (A.areas === 1 ? "" : "s");
+}
+
+/* ---------- feed ---------- */
+function renderFeed() {
+  var ul = $("feed"); ul.textContent = ""; var n = 0;
+  FEED.forEach(function (e) {
+    var c = CL.filter(function (x) { return x.n === e.area; })[0];
+    if (!inArea(c)) return;
+    if (F.t && e.type !== F.t) return;                    /* restricted items have no crime type: hidden when a type is chosen */
+    if (F.s === "open" && e.st === "closed") return;
+    if (F.s === "closed" && e.st !== "closed") return;
+    n++;
+    var li = h("li", "feed-item"); li.appendChild(h("span", "feed-item__time", e.t));
+    var b = h("div"); var t = h("div", "feed-item__title"); t.appendChild(document.createTextNode(e.title)); t.appendChild(h("span", "chip chip--dot chip--" + e.st, STATUS[e.st])); b.appendChild(t);
+    var m = h("div", "feed-item__meta"); kids(m, h("span", "", e.area), h("span", "ref", e.ref));
+    if (e.r) { var r = h("span", "restricted"); kids(r, ico("lock"), document.createTextNode("Restricted record - access logged")); m.appendChild(r); }
+    b.appendChild(m); li.appendChild(b); ul.appendChild(li);
+  });
+  if (!n) { var li2 = h("li"); var s = h("div", "state"); kids(s, kids(h("span", "state__icon"), ico("inbox", "icon--lg")), h("p", "state__title", "Nothing for this view"), h("p", "state__text", "Try a wider period or clear the filters.")); ul.appendChild(kids(li2, s)); }
+}
+
+/* ---------- escalations strip ---------- */
+function renderEsc() {
+  var ul = $("esc-list"); ul.textContent = ""; var unack = 0;
+  ESC.forEach(function (e, i) {
+    if (!e.ack) unack++;
+    var li = h("li", "escalation " + (e.ack ? "is-ack" : "is-new") + (e.fresh ? " esc-new-flash" : ""));
+    var t = h("div", "escalation__title");
+    if (!e.ack) t.appendChild(h("span", "escalation__new", "NEW")); t.appendChild(document.createTextNode(e.title));
+    if (e.r) { var r = h("span", "restricted"); kids(r, ico("lock"), document.createTextNode("Restricted record - access logged")); t.appendChild(r); }
+    li.appendChild(t);
+    var mt = h("div", "escalation__meta"); kids(mt, h("span", "ref", e.ref), h("span", "", "Escalated by " + e.by + " · " + e.ago + (e.ack ? " · acknowledged" : ""))); mt.lastChild.style.display = "block"; li.appendChild(mt);
+    var b = h("button", "btn " + (e.ack ? "btn--secondary" : "btn--primary") + " escalation__act"); b.type = "button";
+    if (e.ack) { b.disabled = true; kids(b, ico("check"), document.createTextNode("Acknowledged")); } else { b.textContent = "Acknowledge"; b.addEventListener("click", function () { e.ack = true; e.fresh = false; toast("Acknowledged. The control room can see this."); renderEsc(); renderKpis(aggregate()); renderMap(); }); }
+    li.appendChild(b); ul.appendChild(li);
+  });
+  $("esc-count").textContent = ESC.length; $("esc-hint").textContent = unack ? unack + " needs acknowledgement" : "All acknowledged";
+}
+
+/* ---------- map: Leaflet + OpenStreetMap when reachable, static outline otherwise ---------- */
+var KZN = [[32.89, -26.85], [32.6, -27.45], [32.45, -28.1], [32.2, -28.55], [32.05, -28.8], [31.6, -29.1], [31.3, -29.4], [31.05, -29.85], [30.75, -30.35], [30.45, -30.75], [30.2, -31.05], [29.7, -30.55], [29.45, -30.2], [29.2, -29.95], [29.05, -29.55], [29.25, -29.15], [29.4, -28.75], [29.15, -28.45], [29.35, -28.15], [29.7, -27.95], [29.55, -27.6], [30.0, -27.3], [30.45, -27.05], [30.95, -26.95], [31.35, -27.3], [31.95, -27.35], [32.05, -26.85], [32.45, -26.85]];
+function proj(lon, lat) { var k = 112, c = Math.cos(29 * Math.PI / 180); return [24 + (lon - 28.9) * k * c, 16 + (-26.6 - lat) * k]; }
+function pins() {
+  /* eThekwini stations merge into one bubble while zoomed out, so nothing overlaps */
+  var out = [], metro = { n: "eThekwini metro", lat: -29.86, lon: 30.95, total: 0, shown: 0, any: false, parts: 0 };
+  CL.forEach(function (c) { if (!inArea(c)) return; var s = stats(c); if (c.d === "eThekwini metro" && !F.a || (c.d === "eThekwini metro" && F.a === "eThekwini metro")) { metro.total += s.total; metro.shown += s.shown; metro.parts++; } else out.push({ n: c.n, lat: c.lat, lon: c.lon, shown: s.shown, total: s.total, key: c.n }); });
+  if (metro.parts) out.unshift({ n: metro.n, lat: metro.lat, lon: metro.lon, shown: metro.shown, total: metro.total, key: "eThekwini metro", alert: ESC.some(function (e) { return !e.ack && /Inanda/.test(e.title); }) });
+  return out;
+}
+function renderFallback() {
+  var box = $("fallback"); box.textContent = "";
+  var s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", "0 0 460 560"); s.setAttribute("aria-hidden", "true");
+  var d = KZN.map(function (p, i) { var q = proj(p[0], p[1]); return (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1); }).join("") + "Z";
+  var path = document.createElementNS(NS, "path"); path.setAttribute("d", d); path.setAttribute("fill", "var(--color-surface-2)"); path.setAttribute("stroke", "var(--color-border-strong)"); path.setAttribute("stroke-width", "2"); path.setAttribute("stroke-linejoin", "round"); s.appendChild(path);
+  var lab = document.createElementNS(NS, "text"); lab.setAttribute("x", "340"); lab.setAttribute("y", "520"); lab.setAttribute("fill", "var(--color-text-subtle)"); lab.setAttribute("font-size", "12"); lab.textContent = "Simplified outline (map tiles unavailable)"; lab.setAttribute("text-anchor", "middle"); s.appendChild(lab);
+  pins().forEach(function (p) {
+    var q = proj(p.lon, p.lat), sup = p.shown < 5, r = sup ? 15 : 14 + Math.sqrt(p.shown) * 2.6;
+    var g = document.createElementNS(NS, "g"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button"); g.setAttribute("aria-label", p.n + ": " + band(p.shown) + " cases. Select to filter."); g.style.cursor = "pointer";
+    var c = document.createElementNS(NS, "circle"); c.setAttribute("cx", q[0]); c.setAttribute("cy", q[1]); c.setAttribute("r", r);
+    c.setAttribute("fill", sup ? "none" : "var(--gold-400)"); c.setAttribute("stroke", p.alert ? "var(--red-600)" : sup ? "var(--color-text-subtle)" : "var(--navy-900)"); c.setAttribute("stroke-width", p.alert ? "4" : "2"); if (sup) c.setAttribute("stroke-dasharray", "4 3");
+    var t = document.createElementNS(NS, "text"); t.setAttribute("x", q[0]); t.setAttribute("y", q[1] + 5); t.setAttribute("text-anchor", "middle"); t.setAttribute("font-weight", "700"); t.setAttribute("font-size", "15"); t.setAttribute("fill", sup ? "var(--color-text-muted)" : "#08142b"); t.textContent = band(p.shown);
+    var l = document.createElementNS(NS, "text"); l.setAttribute("x", q[0] + r + 6); l.setAttribute("y", q[1] + 5); l.setAttribute("font-size", "13"); l.setAttribute("fill", "var(--color-text)"); l.textContent = p.n;
+    kids(g, c, t, l); g.addEventListener("click", function () { pickArea(p.key); }); g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickArea(p.key); } });
+    s.appendChild(g);
+  });
+  box.appendChild(s);
+}
+var lmap = null, layer = null, leafOk = false, forceFallback = false;
+function renderLeaflet() {
+  if (!leafOk || !window.L) return;
+  if (!lmap) {
+    $("leaflet").hidden = false;
+    lmap = L.map("leaflet", { zoomControl: true, scrollWheelZoom: false, minZoom: 6, maxZoom: 12 }).fitBounds([[-31.2, 28.9], [-26.8, 33.0]]);
+    var tl = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(lmap);
+    var ok = false, errs = 0;
+    tl.on("tileload", function () { if (!ok) { ok = true; $("fallback").style.visibility = "hidden"; } });
+    tl.on("tileerror", function () { errs++; if (!ok && errs > 4) { lmap.remove(); lmap = null; $("leaflet").hidden = true; leafOk = false; } });
+    layer = L.layerGroup().addTo(lmap); lmap.on("zoomend", renderLeaflet); fitSelection();
+  }
+  layer.clearLayers();
+  var z = lmap.getZoom();
+  pinsFor(z).forEach(function (p) {
+    var sup = p.shown < 5, size = sup ? 34 : Math.min(88, 30 + Math.sqrt(p.shown) * 5.2);
+    var html = '<div class="pin ' + (sup ? "pin--suppressed " : "") + (p.alert ? "pin--alert" : "") + '" style="width:' + size + 'px;height:' + size + 'px;font-size:' + (sup ? 13 : 15) + 'px">' + band(p.shown) + "</div>";
+    var m = L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "", html: html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), keyboard: true, title: p.n + ": " + band(p.shown) + " cases" }).addTo(layer);
+    m.bindTooltip(p.n + " (" + band(p.shown) + ")", { direction: "top", offset: [0, -size / 2] });
+    m.on("click", function () { pickArea(p.key); });
+  });
+}
+function pinsFor(z) {
+  if (z >= 10) { var out = []; CL.forEach(function (c) { if (!inArea(c)) return; var s = stats(c); out.push({ n: c.n, lat: c.lat, lon: c.lon, shown: s.shown, key: c.n, alert: c.n === "Inanda" && ESC.some(function (e) { return !e.ack && /Inanda/.test(e.title); }) }); }); return out; }
+  return pins();
+}
+function renderMap() { renderFallback(); renderLeaflet(); }
+function pickArea(key) {
+  F.a = key; $("f-area").value = key; sync(); renderAll(true);
+}
+
+/* ---------- wiring ---------- */
+function fitSelection() {
+  if (!lmap) return;
+  var sel = CL.filter(inArea);
+  if (!F.a || sel.length > 6) { lmap.fitBounds([[-31.2, 28.9], [-26.8, 33.0]]); return; }
+  lmap.fitBounds(sel.map(function (c) { return [c.lat, c.lon]; }), { padding: [60, 60], maxZoom: sel.length === 1 ? 12 : 11 });
+}
+function sync() {
+  document.querySelectorAll("#f-period button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === F.p)); });
+  document.querySelectorAll("#f-status button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === F.s)); });
+  $("f-area").value = F.a; $("f-type").value = F.t; writeHash();
+}
+function renderAll(fit) { renderKpis(aggregate()); renderFeed(); renderMap(); if (fit) fitSelection(); }
+document.querySelectorAll("#f-period button").forEach(function (b) { b.addEventListener("click", function () { F.p = b.getAttribute("data-v"); sync(); renderAll(); }); });
+document.querySelectorAll("#f-status button").forEach(function (b) { b.addEventListener("click", function () { F.s = b.getAttribute("data-v"); sync(); renderAll(); }); });
+$("f-area").addEventListener("change", function () { F.a = this.value; sync(); renderAll(true); });
+$("f-type").addEventListener("change", function () { F.t = this.value; sync(); renderAll(); });
+$("clear").addEventListener("click", function () { F = { p: "today", a: "", t: "", s: "" }; sync(); renderAll(true); });
+window.addEventListener("hashchange", function () { readHash(); sync(); renderAll(true); });
+
+$("r-new").addEventListener("click", function () {
+  ESC.unshift({ ref: "KZN-ANO-2026-00118", title: "Armed group seen, Umlazi", by: "OP-12", ago: "just now", r: true, ack: false, fresh: true });
+  renderEsc(); renderKpis(aggregate()); toast("New escalation received");
+});
+$("r-nomap").addEventListener("click", function () {
+  var on = this.getAttribute("aria-pressed") !== "true"; this.setAttribute("aria-pressed", String(on));
+  if (on) { if (lmap) { lmap.remove(); lmap = null; } $("leaflet").hidden = true; leafOk = false; $("fallback").style.visibility = "visible"; renderFallback(); } else { leafOk = !!window.L; $("fallback").style.visibility = "visible"; renderMap(); }
+});
+document.querySelector(".mock-rail__toggle").addEventListener("click", function () { var r = this.closest(".mock-rail"); var c = r.classList.toggle("is-collapsed"); this.setAttribute("aria-expanded", String(!c)); this.firstElementChild.textContent = c ? "Mockup controls +" : "Mockup controls -"; });
+function setChromeH() { document.documentElement.style.setProperty("--chrome-h", $("chrome").offsetHeight + "px"); }
+window.addEventListener("resize", setChromeH);
+
+function loadLeaflet(cb) {
+  var css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(css);
+  var s = document.createElement("script"); s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload = function () { cb(true); }; s.onerror = function () { cb(false); };
+  document.head.appendChild(s); setTimeout(function () { if (!window.L) cb(false); }, 5000);
+}
+
+readHash(); sync(); setChromeH(); renderEsc(); renderAll();
+loadLeaflet(function (ok) { leafOk = ok && !!window.L; if (leafOk && $("r-nomap").getAttribute("aria-pressed") !== "true") renderLeaflet(); });
+</script>
+</body>
+</html>

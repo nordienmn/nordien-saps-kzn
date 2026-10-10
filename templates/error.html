@@ -1,1 +1,14 @@
-<!doctype html><title>placeholder</title>
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block body %}
+<div class="app-column">
+  <main id="main" class="page-pad">
+    <div class="state state--error">
+      <span class="state__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-alert"/></svg></span>
+      <h1 class="state__title">{{ message }}</h1>
+      <p class="state__text">In an emergency, call 10111.</p>
+      <a class="btn btn--primary" href="/citizen">Back to the start</a>
+    </div>
+  </main>
+</div>
+{% endblock %}

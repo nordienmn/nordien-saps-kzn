@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="{% block theme %}light{% endblock %}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}SAPS KZN{% endblock %} (DEMO)</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a2347">
+<link rel="icon" href="/static/img/badge.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/app.css">
+{% block head %}{% endblock %}
+</head>
+<body class="canvas {% block bodyclass %}{% endblock %}">
+<a class="skip-link" href="#main" data-i18n="skip">Skip to main content</a>
+{% block chrome %}
+<div class="chrome">
+  <div class="demo-banner" role="note">
+    <span class="demo-banner__tag">Demo</span>
+    <span data-i18n="demo">Demonstration only. This does not reach 10111. In an emergency, call 10111.</span>
+  </div>
+</div>
+{% endblock %}
+{% block body %}{% endblock %}
+<div class="toast-region" role="status" aria-live="polite" id="toasts"></div>
+<script src="/static/js/core.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

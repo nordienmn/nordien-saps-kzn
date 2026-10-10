@@ -20,6 +20,48 @@ CLUSTERS = {
 }
 UNLOCATED = "unlocated"
 
+# Representative stations, grouped under the demo clusters. Real station names, approximate positions,
+# demo grouping (KZN has about 184 stations; this is a sample so the board can show deployments).
+# key: (name, cluster, lat, lon)
+STATIONS = {
+    "durban_central": ("Durban Central", "durban_central", -29.8587, 31.0218),
+    "berea": ("Berea", "durban_central", -29.8480, 31.0070),
+    "umbilo": ("Umbilo", "durban_central", -29.8790, 30.9990),
+    "mayville": ("Mayville", "durban_central", -29.8400, 30.9700),
+    "sydenham": ("Sydenham", "durban_central", -29.8450, 30.9500),
+    "umlazi": ("Umlazi", "umlazi", -29.9697, 30.8864),
+    "isipingo": ("Isipingo", "umlazi", -30.0000, 30.9300),
+    "pinetown": ("Pinetown", "pinetown", -29.8167, 30.8667),
+    "westville": ("Westville", "pinetown", -29.8330, 30.9170),
+    "new_germany": ("New Germany", "pinetown", -29.8000, 30.9000),
+    "chatsworth": ("Chatsworth", "chatsworth", -29.9175, 30.8870),
+    "kwamashu": ("KwaMashu", "inanda", -29.7500, 30.9800),
+    "inanda": ("Inanda", "inanda", -29.6970, 30.9460),
+    "phoenix": ("Phoenix", "inanda", -29.7000, 31.0000),
+    "pietermaritzburg": ("Pietermaritzburg", "pietermaritzburg", -29.6006, 30.3794),
+    "plessislaer": ("Plessislaer", "pietermaritzburg", -29.6300, 30.3200),
+    "richards_bay": ("Richards Bay", "richards_bay", -28.7830, 32.0377),
+    "empangeni": ("Empangeni", "empangeni", -28.7500, 31.9000),
+    "newcastle": ("Newcastle", "newcastle", -27.7577, 29.9318),
+    "port_shepstone": ("Port Shepstone", "port_shepstone", -30.7410, 30.4550),
+}
+
+
+def station_name(key):
+    return STATIONS.get(key, (key,))[0]
+
+
+def nearest_station(lat, lon):
+    """The closest sample station to a point, or None if the point is unusable."""
+    if not valid_point(lat, lon):
+        return None
+    lat, lon = float(lat), float(lon)
+    return min(STATIONS, key=lambda k: _hav(lat, lon, STATIONS[k][2], STATIONS[k][3]))
+
+
+def station_options():
+    return [{"key": k, "name": v[0], "cluster": v[1], "lat": v[2], "lon": v[3]} for k, v in STATIONS.items()]
+
 # Rough bounding box of KwaZulu-Natal, used to reject coordinates that are plainly elsewhere.
 KZN_BOX = (-31.2, -26.7, 28.8, 33.0)  # lat_min, lat_max, lon_min, lon_max
 

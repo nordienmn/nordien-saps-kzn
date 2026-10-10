@@ -1,0 +1,322 @@
+/* ==========================================================================
+   SAPS KZN design tokens  -  v1.0  (2026-10-10)
+   --------------------------------------------------------------------------
+   One token set, two themes from ONE palette family:
+     data-theme="light"  citizen app (default, also applied to :root)
+     data-theme="ops"    desk + commissioner (dark "operations" theme)
+   The ops theme is chosen per page with the attribute. prefers-color-scheme is
+   deliberately NOT used: a control room must not change look with a phone/OS
+   setting, and a citizen must not get a dark app by accident.
+
+   Palette: SAPS navy + SAPS gold + ONE signal red (emergency only).
+   Everything else is a cool slate neutral or a semantic status colour.
+   Gold is brand decoration and the ops primary action. It is NEVER a status.
+   Red is NEVER decoration. See design-system.md for the rules.
+
+   Sizes are in rem so the layout scales with the user's text-size setting
+   (WCAG 1.4.4 / 1.4.10) and with the boardroom density switch.
+   ========================================================================== */
+
+:root {
+  /* ---------- 1. Primitives (do not use directly in components) ---------- */
+
+  /* Navy: taken from the SAPS badge field, widened into a ramp */
+  --navy-950: #050e20;
+  --navy-900: #08142b;
+  --navy-800: #0e1f3e;
+  --navy-700: #142a52;
+  --navy-600: #14377a;
+  --navy-500: #1f4fa3;
+  --navy-400: #5b84cc;
+  --navy-300: #94b1e4;
+  --navy-200: #c5d5f0;
+  --navy-100: #e3ebf8;
+  --navy-50:  #f1f5fc;
+
+  /* Slate: cool neutrals that sit next to navy without going muddy */
+  --slate-950: #0f1b33;
+  --slate-700: #3b4961;
+  --slate-600: #4a5873;
+  --slate-500: #5f6d86;
+  --slate-400: #74839b;
+  --slate-300: #b4bfd0;
+  --slate-200: #d5dce8;
+  --slate-100: #e9eef5;
+  --slate-50:  #f3f5f9;
+
+  /* Gold: the badge gold, with a dark "text gold" for use on light surfaces */
+  --gold-100: #f6ecd2;
+  --gold-300: #f5cf6b;
+  --gold-400: #e3b94f;
+  --gold-500: #c9a03a;
+  --gold-600: #9a7418;
+  --gold-700: #7a5a12;
+
+  /* Signal red: ONE hue, emergency only. Vermilion-leaning on purpose so it is
+     visibly not Municipal crimson (#c10d42, which leans pink). */
+  --red-900: #5a1418;
+  --red-700: #a3141b;
+  --red-600: #c9291a;
+  --red-400: #ff7a70;
+  --red-100: #fce4e3;
+
+  /* ---------- 2. Type ---------- */
+  /* Display = Barlow Semi Condensed: highway/number-plate signage lineage, so it
+     reads institutional and police, and its condensed width keeps long isiZulu
+     headings and 2x text size from wrapping badly. Numerals are tabular.
+     Text = Public Sans: designed for government interfaces, very legible at
+     small sizes, wide weight range. Two families, 7 font files, ~60 kB. */
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --font-text: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Major-third scale, ratio 1.25, base 1rem = 16px */
+  --fs-xs:   0.8rem;      /* 12.8  uppercase labels and chips ONLY */
+  --fs-sm:   0.875rem;    /* 14    dense ops meta ONLY (half-step) */
+  --fs-base: 1rem;        /* 16    body, minimum for citizen reading text */
+  --fs-md:   1.25rem;     /* 20 */
+  --fs-lg:   1.5625rem;   /* 25 */
+  --fs-xl:   1.953rem;    /* 31 */
+  --fs-2xl:  2.441rem;    /* 39 */
+  --fs-3xl:  3.052rem;    /* 49 */
+  --fs-4xl:  3.815rem;    /* 61 */
+
+  --lh-tight: 1.12;
+  --lh-snug:  1.3;
+  --lh-body:  1.5;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold: 600;
+  --fw-bold:    700;
+
+  --tracking-label: 0.08em;   /* uppercase labels */
+  --tracking-display: -0.005em;
+
+  /* ---------- 3. Spacing: 4px base, 8px rhythm ---------- */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4  */
+  --space-2: 0.5rem;    /* 8  */
+  --space-3: 0.75rem;   /* 12 */
+  --space-4: 1rem;      /* 16 */
+  --space-5: 1.25rem;   /* 20 */
+  --space-6: 1.5rem;    /* 24 */
+  --space-8: 2rem;      /* 32 */
+  --space-10: 2.5rem;   /* 40 */
+  --space-12: 3rem;     /* 48 */
+  --space-16: 4rem;     /* 64 */
+
+  /* ---------- 4. Radius ---------- */
+  --radius-xs: 0.25rem;   /* 4  chips */
+  --radius-sm: 0.5rem;    /* 8  inputs inner */
+  --radius-md: 0.75rem;   /* 12 buttons, fields */
+  --radius-lg: 1rem;      /* 16 cards, tiles */
+  --radius-xl: 1.5rem;    /* 24 sheets, hero */
+  --radius-pill: 999px;
+
+  /* ---------- 5. Motion ---------- */
+  --dur-instant: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 300ms;       /* ceiling for UI transitions */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);   /* small overshoot, settles fast */
+  --pulse-period: 2.4s;    /* slow attention pulse: 0.42 Hz, well under the 1 Hz ceiling */
+
+  /* ---------- 6. Z-index scale ---------- */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-header: 200;
+  --z-banner: 300;      /* DEMO banner always wins over page chrome */
+  --z-dropdown: 400;
+  --z-overlay: 500;
+  --z-dialog: 600;
+  --z-toast: 700;
+  --z-skip: 800;
+
+  /* ---------- 7. Layout ---------- */
+  --target-min: 2.75rem;      /* 44px minimum touch target (WCAG 2.2 AA is 24px; we hold 44) */
+  --banner-h: 2rem;
+  --header-h: 4rem;
+  --content-citizen: 30rem;   /* 480px column */
+  --content-desk: 90rem;      /* 1440 */
+  --focus-width: 3px;
+  --focus-offset: 2px;
+}
+
+/* ==========================================================================
+   LIGHT theme: citizen app (default)
+   ========================================================================== */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: var(--slate-50);
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafd;          /* quiet raised/zebra */
+  --color-sunken: var(--slate-100);
+  --color-overlay: rgba(8, 20, 43, 0.56);
+
+  --color-text: var(--slate-950);      /* 16.9:1 on white */
+  --color-text-muted: var(--slate-600);   /* 7.2:1 on white */
+  --color-text-subtle: var(--slate-500);  /* 5.2:1 on white, 4.8:1 on bg */
+  --color-border: var(--slate-200);       /* decorative hairline */
+  --color-border-strong: var(--slate-400); /* control edges, 3.6:1 on white */
+
+  --color-primary: var(--navy-600);       /* 11.3:1 with white */
+  --color-primary-hover: #0f2c63;
+  --color-on-primary: #ffffff;
+  --color-accent: var(--gold-500);        /* decoration only on light */
+  --color-accent-text: var(--gold-700);   /* gold as text: 6.4:1 on white */
+  --color-on-accent: var(--navy-900);
+  --color-link: var(--navy-500);
+  --color-focus: var(--navy-500);
+  --color-focus-halo: #ffffff;
+
+  --color-header-bg: #ffffff;
+  --color-header-text: var(--navy-600);
+
+  /* EMERGENCY: the single signal red */
+  --color-emergency: var(--red-600);      /* white on it = 5.7:1 */
+  --color-on-emergency: #ffffff;
+  --color-emergency-hover: #b0230f;
+  --color-emergency-text: var(--red-700); /* red as text on light surfaces, 7.1:1 */
+  --color-emergency-soft: var(--red-100);
+
+  /* Answer / go (telephony convention, ops only but defined for both) */
+  --color-answer: #1a7f45;
+  --color-on-answer: #ffffff;
+
+  /* Status: bg / fg / border / solid. Always paired with an icon or a word. */
+  --status-success-bg: #e3f4ea;  --status-success-fg: #0f6b3a;  --status-success-solid: #1f8a4c;
+  --status-warning-bg: #fdf0d5;  --status-warning-fg: #7a4a00;  --status-warning-solid: #b46a00;
+  --status-info-bg:    #e3eefc;  --status-info-fg:    #124aa8;  --status-info-solid:    #1f4fa3;
+  --status-danger-bg:  #fce4e3;  --status-danger-fg:  #a3141b;  --status-danger-solid:  var(--red-600);
+  --status-handoff-bg: #ddf3f2;  --status-handoff-fg: #0b6460;  --status-handoff-solid: #148a84;
+  --status-neutral-bg: var(--slate-100); --status-neutral-fg: #3b4961; --status-neutral-solid: var(--slate-400);
+
+  /* Priority (queue): P1 solid red, P2 solid amber, P3 info, P4 neutral */
+  --prio-1-bg: var(--red-600);   --prio-1-fg: #ffffff;
+  --prio-2-bg: #f5a524;          --prio-2-fg: #2a1a00;
+  --prio-3-bg: var(--status-info-bg);    --prio-3-fg: var(--status-info-fg);
+  --prio-4-bg: var(--status-neutral-bg); --prio-4-fg: var(--status-neutral-fg);
+
+  /* Case age (green < 10 min, amber < 20, red beyond), dot + bar only */
+  --age-ok: #1f8a4c;
+  --age-warn: #c27a00;
+  --age-late: var(--red-600);
+
+  /* Restricted-record badge (GBV / anonymous at board level) */
+  --restricted-bg: var(--navy-100);
+  --restricted-fg: var(--navy-600);
+  --restricted-border: var(--navy-300);
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(15, 27, 51, 0.07), 0 1px 1px rgba(15, 27, 51, 0.04);
+  --shadow-2: 0 2px 6px rgba(15, 27, 51, 0.08), 0 8px 20px rgba(15, 27, 51, 0.06);
+  --shadow-3: 0 12px 32px rgba(15, 27, 51, 0.18), 0 2px 6px rgba(15, 27, 51, 0.08);
+  --shadow-emergency: 0 10px 28px rgba(201, 41, 26, 0.32), 0 2px 6px rgba(201, 41, 26, 0.22);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+
+  --map-tile-filter: none;
+}
+
+/* ==========================================================================
+   OPS theme: desk + commissioner (dark, chosen by attribute, never by OS)
+   Navy-black, not charcoal: Municipal owns charcoal.
+   ========================================================================== */
+[data-theme="ops"] {
+  color-scheme: dark;
+
+  --color-bg: var(--navy-900);
+  --color-surface: var(--navy-800);
+  --color-surface-2: var(--navy-700);
+  --color-sunken: var(--navy-950);
+  --color-overlay: rgba(2, 8, 20, 0.72);
+
+  --color-text: #eef3fb;                 /* 14.7:1 on surface */
+  --color-text-muted: #aebcd4;           /* 8.5:1 */
+  --color-text-subtle: #93a3c0;          /* 5.9:1 on surface, 5.6:1 on surface-2 */
+  --color-border: #223b66;               /* decorative hairline */
+  --color-border-strong: #6580b0;        /* control edges, >= 3:1 on surface */
+
+  --color-primary: var(--gold-400);      /* the one confident accent: gold action */
+  --color-primary-hover: var(--gold-300);
+  --color-on-primary: var(--navy-900);   /* 9.9:1 */
+  --color-accent: var(--gold-400);
+  --color-accent-text: var(--gold-400);
+  --color-on-accent: var(--navy-900);
+  --color-link: #8db8ff;
+  --color-focus: var(--gold-300);
+  --color-focus-halo: var(--navy-950);
+
+  --color-header-bg: var(--navy-950);
+  --color-header-text: #eef3fb;
+
+  --color-emergency: var(--red-600);       /* fill: white text 5.7:1 */
+  --color-on-emergency: #ffffff;
+  --color-emergency-hover: #de3321;
+  --color-emergency-text: var(--red-400);  /* red as text on dark, 6.4:1 */
+  --color-emergency-soft: var(--red-900);
+
+  --color-answer: #2fbf71;
+  --color-on-answer: #04170d;              /* 7.8:1 */
+
+  --status-success-bg: #0f3b27;  --status-success-fg: #6ee0a3;  --status-success-solid: #2fbf71;
+  --status-warning-bg: #4a3208;  --status-warning-fg: #ffc15e;  --status-warning-solid: #f5a524;
+  --status-info-bg:    #11305f;  --status-info-fg:    #8db8ff;  --status-info-solid:    #5b84cc;
+  --status-danger-bg:  #5a1418;  --status-danger-fg:  #ff9c94;  --status-danger-solid:  #de3321;
+  --status-handoff-bg: #0c3f3e;  --status-handoff-fg: #6fd9d2;  --status-handoff-solid: #2bb3ab;
+  --status-neutral-bg: #1c2e52;  --status-neutral-fg: #c0cce0;  --status-neutral-solid: #6580b0;
+
+  --prio-1-bg: var(--red-600);   --prio-1-fg: #ffffff;
+  --prio-2-bg: #f5a524;          --prio-2-fg: #2a1a00;
+  --prio-3-bg: var(--status-info-bg);    --prio-3-fg: var(--status-info-fg);
+  --prio-4-bg: var(--status-neutral-bg); --prio-4-fg: var(--status-neutral-fg);
+
+  --age-ok: #2fbf71;
+  --age-warn: #f5a524;
+  --age-late: #ff6a5c;
+
+  --restricted-bg: #17294f;
+  --restricted-fg: #c5d5f0;
+  --restricted-border: #3d5a91;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.38), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-emergency: 0 0 0 1px rgba(255, 106, 92, 0.5), 0 8px 28px rgba(201, 41, 26, 0.45);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* Dark basemap from the standard OSM tiles (see components.css .map) */
+  --map-tile-filter: invert(1) hue-rotate(205deg) saturate(0.45) brightness(0.82) contrast(0.92);
+}
+
+/* ==========================================================================
+   Surface density: the commissioner board is read from across a boardroom.
+   Everything is rem, so one root change scales the whole surface.
+   ========================================================================== */
+html[data-surface="board"] { font-size: 112.5%; }          /* 18px  at 1280-1599 */
+@media (min-width: 1600px) { html[data-surface="board"] { font-size: 125%; } } /* 20px at 1600+ */
+
+/* ==========================================================================
+   Reduced motion: honour the OS setting everywhere. Pulses become a static
+   state that is still visible (colour + label), never a missing signal.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0.01ms;
+    --dur-fast: 0.01ms;
+    --dur-base: 0.01ms;
+    --dur-slow: 0.01ms;
+    --pulse-period: 0.01ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -136,6 +136,10 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
     name = clean(payload.get("name"), 80)
     mobile = clean_mobile(payload.get("mobile"))
     note = clean(payload.get("note"), MAX_NOTE)
+    # Optional, self-described, used only in grouped statistics. Anything not recognised becomes "undisclosed".
+    gender = payload.get("gender") if payload.get("gender") in taxonomy.GENDERS else "undisclosed"
+    age_band = payload.get("age_band") if payload.get("age_band") in taxonomy.AGE_BANDS else "undisclosed"
+    language = payload.get("lang") if payload.get("lang") in taxonomy.LANGUAGES else "en"
     label_key = "other"
     priority = "normal"
     extra = {}
@@ -211,6 +215,10 @@ def create_case(store, payload, channel="app", synthetic=False, created_at=None)
         "mobile": mobile,
         "note": note,
         "assigned_to": "",
+        "gender": gender,
+        "age_band": age_band,
+        "language": language,
+        "deployments": [],
         "media": [],
         "transcript": [],
         "timeline": [{"at": ts, "actor": "citizen" if not synthetic else "system", "text": f"Received via {channel}.", "kind": "system"}],
@@ -272,16 +280,22 @@ def create_tip(store, payload, synthetic=False, created_at=None):
         "lon": lon,
         "address": address,
         "note": clean(payload.get("note"), MAX_NOTE),
-        "status": "new",  # new | escalated | acknowledged | closed
+        "status": "new",  # new | verified | referred | acknowledged | directed | closed
         "code_hash": hashlib.sha256(code.encode()).hexdigest(),
         "timeline": [{"at": ts, "actor": "system", "text": "Tip received. Not a case. No identity stored.", "kind": "system"}],
         "created_at": ts,
         "updated_at": ts,
-        "escalated_at": None,
-        "escalated_by": "",
+        "verification": None,
+        "referred_at": None,
+        "referred_by": "",
+        "referral_note": "",
+        "referrals": [],
         "synthetic": synthetic,
         "restricted": True,
+        "media": [],
     }
+    if not synthetic:
+        tip["media"] = _save_media(store, tip, (payload.get("photos") or [])[:1], "")  # photos are re-encoded in the browser, so location EXIF is gone
     store.put("tips", tip)
     return tip, code
 
@@ -291,32 +305,117 @@ def tip_label(tip, lang="en"):
     return (row[1] if lang == "zu" else row[0]) if row else tip["type_key"]
 
 
-def escalate_tip(store, tip_id, officer):
+# Tip life: new -> verified -> referred (a VERIFIED REFERRAL FOR HQ ACTION) -> acknowledged -> directed -> closed.
+# The desk's tip-off line sees every tip first, checks it and acts on it. It refers to HQ only after verification.
+# HQ sees every tip as it comes in (oversight) and, separately, the verified referrals that need its action.
+TIP_OUTCOMES = {
+    "used": "The information was used.",
+    "no_action": "There was not enough to act on.",
+    "duplicate": "This matched another tip already being handled.",
+    "not_verified": "It could not be verified.",
+}
+
+
+def verify_tip(store, tip_id, officer, payload):
+    result = clean(payload.get("result"), 14)
+    note = clean(payload.get("note"), 300)
+    if result not in ("verified", "not_verified"):
+        raise Invalid("Choose a result.", "result")
+    if len(note) < 3:
+        raise Invalid("Say how you checked it.", "note")
+
     def fn(tip):
-        if tip["status"] in ("new", "acknowledged"):
-            tip["status"] = "escalated"
-            tip["escalated_at"] = now()
-            tip["escalated_by"] = officer
-            event(tip, officer, "Escalated to senior leadership.", "escalate")
+        if tip["status"] == "closed":
+            raise Invalid("This tip is closed.")
+        tip["verification"] = {"result": result, "by": officer, "at": now(), "note": note}
+        if result == "verified" and tip["status"] == "new":
+            tip["status"] = "verified"
+        event(tip, officer, ("Verified: " if result == "verified" else "Could not verify: ") + note, "verify")
 
     tip = store.patch("tips", tip_id, fn)
     if tip is None:
         raise Invalid("Tip not found.")
-    audit(store, officer, "desk", "tip.escalate", tip_id)
+    audit(store, officer, "desk", "tip.verify", tip_id, result)
+    return tip
+
+
+def action_tip(store, tip_id, officer, note):
+    note = clean(note, 300)
+    if len(note) < 3:
+        raise Invalid("Write what was done.", "note")
+
+    def fn(tip):
+        if tip["status"] == "closed":
+            raise Invalid("This tip is closed.")
+        event(tip, officer, "Action taken at the desk: " + note, "action")
+
+    tip = store.patch("tips", tip_id, fn)
+    if tip is None:
+        raise Invalid("Tip not found.")
+    audit(store, officer, "desk", "tip.action", tip_id)
+    return tip
+
+
+def refer_tip_to_hq(store, tip_id, officer, note=""):
+    """Only a verified tip can be referred. HQ then sees it as a verified referral for its action."""
+    note = clean(note, 300)
+
+    def fn(tip):
+        if tip["status"] != "verified":
+            raise Invalid("Verify the tip before you refer it to HQ.")
+        tip["status"] = "referred"
+        tip["referred_at"] = now()
+        tip["referred_by"] = officer
+        tip["referral_note"] = note
+        event(tip, officer, "Verified referral sent to HQ for action." + (" " + note if note else ""), "refer")
+
+    tip = store.patch("tips", tip_id, fn)
+    if tip is None:
+        raise Invalid("Tip not found.")
+    audit(store, officer, "desk", "tip.refer_hq", tip_id)
     return tip
 
 
 def acknowledge_tip(store, tip_id, actor):
     def fn(tip):
-        if tip["status"] == "escalated":
+        if tip["status"] == "referred":
             tip["status"] = "acknowledged"
-            event(tip, actor, "Acknowledged by senior leadership.", "ack")
+            event(tip, actor, "Acknowledged by HQ.", "ack")
 
     tip = store.patch("tips", tip_id, fn)
     if tip is None:
         raise Invalid("Tip not found.")
     audit(store, actor, "board", "tip.acknowledge", tip_id)
     return tip
+
+
+def close_tip(store, tip_id, actor, outcome, role="board"):
+    if outcome not in TIP_OUTCOMES:
+        raise Invalid("Choose an outcome.", "outcome")
+
+    def fn(tip):
+        if role == "desk" and tip["status"] in ("referred", "acknowledged", "directed"):
+            raise Invalid("This tip is with HQ. HQ closes it.")
+        tip["status"] = "closed"
+        tip["outcome"] = outcome
+        tip["closed_at"] = now()
+        tip["closed_by"] = role
+        event(tip, actor, "Closed. " + TIP_OUTCOMES[outcome], "close")
+
+    tip = store.patch("tips", tip_id, fn)
+    if tip is None:
+        raise Invalid("Tip not found.")
+    audit(store, actor, role, "tip.close", tip_id, outcome)
+    return tip
+
+
+def tip_public_status(store, code):
+    """What the citizen sees when they check a tip with their one-time code. No identity is involved."""
+    tip = check_tip_code(store, code)
+    if tip is None:
+        return None
+    stage = {"new": "received", "verified": "checked", "referred": "senior", "acknowledged": "senior", "directed": "unit", "closed": "closed"}.get(tip["status"], "received")
+    return {"ref": tip["ref"], "stage": stage, "outcome": TIP_OUTCOMES.get(tip.get("outcome", ""), ""), "updated_at": tip["updated_at"]}
 
 
 def check_tip_code(store, code):
@@ -506,6 +605,11 @@ def seed_partners(store):
         ("mun-ethekwini-lights", "municipal", "eThekwini Municipality: Roads and street lighting (demo)", "eThekwini"),
         ("mun-ethekwini-parks", "municipal", "eThekwini Municipality: Parks and public safety (demo)", "eThekwini"),
         ("mun-msunduzi", "municipal", "Msunduzi Municipality: Public works (demo)", "Msunduzi"),
+        ("unit-flying-dbn", "saps_flying", "Flying Squad, Durban (demo)", "eThekwini"),
+        ("unit-intel", "saps_intel", "Provincial Crime Intelligence (demo)", "Province"),
+        ("unit-detective", "saps_detective", "Provincial Detective Service (demo)", "Province"),
+    ] + [
+        (f"unit-cluster-{key}", "saps_cluster", f"Cluster Commander, {val[0]} (demo)", val[0]) for key, val in geo.CLUSTERS.items()
     ]
     for pid, kind, name, area in rows:
         store.put("partners", {"id": pid, "type": kind, "name": name, "area": area, "contact": "Demo contact. Nothing is sent to a real organisation."})
@@ -555,6 +659,107 @@ def create_referral(store, case_id, officer, payload, synthetic=False):
     return ref
 
 
+def create_direction(store, target_id, actor, payload):
+    """HQ directs a case or a tip to a unit INSIDE SAPS, with an instruction and a due time."""
+    partner = store.get("partners", clean(payload.get("unit_id"), 50))
+    if partner is None or partner["type"] not in taxonomy.SAPS_UNIT_TYPES:
+        raise Invalid("Choose a SAPS unit.", "unit_id")
+    instruction = clean(payload.get("instruction"), 300)
+    if len(instruction) < 3:
+        raise Invalid("Write the instruction.", "instruction")
+    try:
+        minutes = int(payload.get("due_minutes") or 60)
+    except (TypeError, ValueError):
+        minutes = 60
+    minutes = min(max(minutes, 15), 24 * 60)
+
+    coll = "cases"
+    target = store.get("cases", target_id)
+    if target is None:
+        target, coll = store.get("tips", target_id), "tips"
+    if target is None:
+        raise Invalid("That file was not found.")
+    share = bool(payload.get("consent_to_share", not target.get("restricted", False)))
+    rid = f"R{store.next_seq('referral'):05d}"
+    ref = {
+        "id": rid, "case_id": target_id, "case_ref": target["ref"], "type": partner["type"], "partner_id": partner["id"],
+        "partner_name": partner["name"], "status": "sent", "urgency": "urgent" if minutes <= 60 else "routine",
+        "consent_to_share": share, "note": instruction, "origin": "board", "instruction": instruction,
+        "created_by": actor, "created_at": now(), "updated_at": now(), "due_at": now() + minutes * 60,
+        "sla_due_at": now() + minutes * 60, "synthetic": False,
+    }
+    store.put("referrals", ref)
+
+    def fn(doc):
+        doc.setdefault("referrals", []).append(rid)
+        event(doc, actor, f"Directed to {partner['name']}: {instruction} Due in {minutes} min.", "direction")
+        if coll == "tips" and doc["status"] in ("new", "verified", "referred", "acknowledged"):
+            doc["status"] = "directed"
+        if coll == "cases":
+            if doc["status"] == "new":
+                doc["status"] = "assigned"
+            doc["first_action_at"] = doc.get("first_action_at") or now()
+
+    store.patch(coll, target_id, fn)
+    audit(store, actor, "board", "direction.create", target_id, f"{partner['name']}: {instruction}")
+    return ref
+
+
+# ----------------------------------------------------------------------------- deployments
+def dispatch(store, case_id, officer, payload):
+    """The desk sends a station or unit to a case. Times feed the HQ response statistics."""
+    station = clean(payload.get("station"), 30)
+    if station not in geo.STATIONS:
+        raise Invalid("Choose a station.", "station")
+    unit = clean(payload.get("unit"), 30)
+    if unit not in taxonomy.UNIT_KINDS:
+        unit = "Patrol vehicle"
+    dep = {
+        "id": f"D{store.next_seq('deployment'):05d}", "station": station, "station_name": geo.station_name(station),
+        "unit": unit, "status": "dispatched", "dispatched_at": now(), "dispatched_by": officer, "arrived_at": None, "cleared_at": None,
+    }
+
+    def fn(c):
+        if c["status"] == "closed":
+            raise Invalid("This file is closed. Reopen it first.")
+        c.setdefault("deployments", []).append(dep)
+        c["assigned_to"] = c["assigned_to"] or officer
+        if c["status"] in ("new", "assigned"):
+            c["status"] = "in_progress"
+        c["first_action_at"] = c.get("first_action_at") or now()
+        event(c, officer, f"{unit} dispatched from {dep['station_name']}.", "deployment")
+
+    case = store.patch("cases", case_id, fn)
+    if case is None:
+        raise Invalid("Case not found.")
+    audit(store, officer, "desk", "deployment.dispatch", case_id, f"{unit} from {dep['station_name']}")
+    return dep
+
+
+def update_deployment(store, case_id, dep_id, officer, status):
+    if status not in ("on_scene", "cleared"):
+        raise Invalid("Unknown status.")
+
+    def fn(c):
+        for d in c.get("deployments", []):
+            if d["id"] == dep_id:
+                if status == "on_scene" and not d["arrived_at"]:
+                    d["status"], d["arrived_at"] = "on_scene", now()
+                    event(c, officer, f"{d['unit']} from {d['station_name']} on scene.", "deployment")
+                elif status == "cleared":
+                    d["status"], d["cleared_at"] = "cleared", now()
+                    d["arrived_at"] = d["arrived_at"] or now()
+                    event(c, officer, f"{d['unit']} from {d['station_name']} cleared.", "deployment")
+                return
+        raise Invalid("Deployment not found.")
+
+    case = store.patch("cases", case_id, fn)
+    if case is None:
+        raise Invalid("Case not found.")
+    audit(store, officer, "desk", f"deployment.{status}", case_id)
+    return case
+
+
 def update_referral(store, referral_id, actor, status):
     if status not in ("acknowledged", "completed"):
         raise Invalid("Unknown status.")
@@ -564,11 +769,12 @@ def update_referral(store, referral_id, actor, status):
 
     def fn(c):
         event(c, actor, f"{ref['partner_name']}: {status}.", "referral")
-        if status == "completed" and c["kind"] == "area":
+        if status == "completed" and c.get("kind") == "area":
             c["status"] = "closed"
             c["closed_at"] = now()
 
-    store.patch("cases", ref["case_id"], fn)
+    coll = "cases" if store.get("cases", ref["case_id"]) else "tips"
+    store.patch(coll, ref["case_id"], fn)
     audit(store, actor, "desk", f"referral.{status}", ref["case_id"])
     return ref
 
@@ -579,15 +785,23 @@ def partner_view(store, partner_id):
     for r in sorted(store.all("referrals"), key=lambda x: -x["created_at"]):
         if r["partner_id"] != partner_id:
             continue
-        case = store.get("cases", r["case_id"]) or {}
+        case = store.get("cases", r["case_id"])
+        is_tip = False
+        if case is None:
+            case, is_tip = store.get("tips", r["case_id"]), True
+        case = case or {}
         item = {
             "id": r["id"], "case_ref": r["case_ref"], "status": r["status"], "urgency": r["urgency"],
-            "created_at": r["created_at"], "note": r["note"],
+            "created_at": r["created_at"], "note": r["note"], "origin": r.get("origin", "desk"),
+            "due_at": r.get("due_at"), "instruction": r.get("instruction", ""),
             "cluster": geo.name(case.get("cluster", geo.UNLOCATED)),
-            "label": case_label(case) if case else "",
+            "label": (tip_label(case) if is_tip else case_label(case)) if case else "",
             "lat": case.get("lat"), "lon": case.get("lon"), "address": case.get("address", ""),
+            "is_tip": is_tip,
         }
-        if r["consent_to_share"] and case:
+        if r.get("origin") == "board" and case:
+            item["detail"] = case.get("note", "")  # a SAPS unit acting on a direction needs what was reported
+        if r["consent_to_share"] and case and not is_tip:
             item["name"], item["mobile"] = case.get("name", ""), case.get("mobile", "")
         out.append(item)
     return out
@@ -623,6 +837,7 @@ def _summary(case, role, lang="en"):
         "created_at": case["created_at"], "updated_at": case["updated_at"],
         "call_state": call.get("state", ""), "call_mode": call.get("mode", ""),
         "referrals": len(case["referrals"]),
+        "deployed": sum(1 for d in case.get("deployments", []) if d["status"] != "cleared"),
         "has_media": bool(case["media"]),
         "synthetic": case.get("synthetic", False),
     }
@@ -636,7 +851,8 @@ def _tip_summary(tip, role, lang="en"):
         "lat": tip["lat"], "lon": tip["lon"],
         "address": tip["address"] if role == "desk" else "",
         "created_at": tip["created_at"], "updated_at": tip["updated_at"],
-        "escalated_at": tip["escalated_at"], "escalated_by": tip["escalated_by"],
+        "referred_at": tip.get("referred_at"), "referred_by": tip.get("referred_by", ""), "verification": tip.get("verification"), "closed_by": tip.get("closed_by", ""),
+        "outcome": tip.get("outcome", ""), "referrals": len(tip.get("referrals", [])), "has_media": bool(tip.get("media")),
         "restricted": True, "priority": "normal", "synthetic": tip.get("synthetic", False),
     }
 
@@ -657,7 +873,16 @@ def feed(store, role):
             for r in sorted(refs, key=lambda x: -x["created_at"])
         ]
     if role == "board":
+        from . import insights  # local import: insights reads the helpers defined above
+
         out["stats"] = stats(store, cases, tips, refs)
+        out["attention"] = attention(store, cases, tips, refs)
+        out["clusters"] = cluster_performance(cases)
+        out["insights"] = insights.build(cases, tips, refs)
+        out["directions"] = [
+            {k: r.get(k) for k in ("id", "case_id", "case_ref", "partner_name", "instruction", "status", "created_at", "due_at", "created_by")}
+            for r in sorted(refs, key=lambda x: -x["created_at"]) if r.get("origin") == "board"
+        ][:30]
     return out
 
 
@@ -675,6 +900,9 @@ def case_detail(store, case_id, officer, role="desk"):
         "occurred_at": case.get("occurred_at"),
         "safe_now": case.get("safe_now"), "wants": case.get("wants"), "know_person": case.get("know_person"),
         "contact_pref": case.get("contact_pref"), "friend": case.get("friend"),
+        "gender": case.get("gender", "undisclosed"), "age_band": case.get("age_band", "undisclosed"), "language": case.get("language", "en"),
+        "deployments": case.get("deployments", []),
+        "suggested_station": geo.nearest_station(case["lat"], case["lon"]) if case["lat"] is not None else None,
         "referral_list": [store.get("referrals", rid) for rid in case["referrals"]],
     })
     detail["call"] = case.get("call")
@@ -687,8 +915,62 @@ def tip_detail(store, tip_id, officer, role="desk"):
         return None
     audit(store, officer, role, "restricted.view", tip_id)
     d = _tip_summary(tip, "desk")
-    d.update({"note": tip["note"], "timeline": tip["timeline"]})
+    d.update({"note": tip["note"], "timeline": tip["timeline"], "media": tip.get("media", []), "outcome": tip.get("outcome", ""), "referral_list": [store.get("referrals", rid) for rid in tip.get("referrals", [])]})
     return d
+
+
+# ----------------------------------------------------------------------------- board: what needs HQ
+def attention(store, cases, tips, refs):
+    """The list HQ acts on first. Most severe first."""
+    t = now()
+    items = []
+    for x in tips:
+        if x["status"] == "referred":
+            items.append({"type": "verified_referral", "severity": 1, "id": x["id"], "ref": x["ref"], "kind": "tip", "label": tip_label(x),
+                          "cluster_name": geo.name(x["cluster"]), "since": x.get("referred_at") or x["created_at"],
+                          "reason": "Verified referral from the desk. Waiting for HQ action."})
+        elif x["status"] == "new" and t - x["created_at"] > 3600:
+            items.append({"type": "tip_waiting", "severity": 3, "id": x["id"], "ref": x["ref"], "kind": "tip", "label": tip_label(x),
+                          "cluster_name": geo.name(x["cluster"]), "since": x["created_at"], "reason": "Tip received more than an hour ago and still unverified at the desk."})
+    for c in cases:
+        if c["status"] == "closed":
+            continue
+        call = c.get("call") or {}
+        if call.get("state") == "ringing" and t - call["started_at"] > 30:
+            items.append({"type": "unanswered_call", "severity": 1, "id": c["id"], "ref": c["ref"], "kind": c["kind"], "label": case_label(c),
+                          "cluster_name": geo.name(c["cluster"]), "since": call["started_at"], "reason": "Call ringing for over 30 seconds."})
+        elif c["priority"] in ("critical", "high") and c["status"] != "referred" and sla_level(c) == "red":  # referred files are tracked through their referral
+            items.append({"type": "past_limit", "severity": 2, "id": c["id"], "ref": c["ref"], "kind": c["kind"], "label": case_label(c),
+                          "cluster_name": geo.name(c["cluster"]), "since": c["created_at"], "reason": "Urgent file past its time limit."})
+    for r in refs:
+        if r["status"] == "completed":
+            continue
+        due = r.get("due_at") or r.get("sla_due_at")
+        if r.get("origin") == "board" and due and t > due:
+            items.append({"type": "direction_overdue", "severity": 2, "id": r["case_id"], "ref": r["case_ref"], "kind": "direction", "label": r["partner_name"],
+                          "cluster_name": "", "since": due, "reason": "Your direction is overdue: " + (r.get("instruction") or "")[:80]})
+        elif r.get("origin") != "board" and r["urgency"] == "urgent" and r["status"] == "sent" and r.get("sla_due_at") and t > r["sla_due_at"]:
+            items.append({"type": "referral_unacknowledged", "severity": 2, "id": r["case_id"], "ref": r["case_ref"], "kind": "referral", "label": r["partner_name"],
+                          "cluster_name": "", "since": r["sla_due_at"], "reason": "Urgent referral not acknowledged in time."})
+    items.sort(key=lambda i: (i["severity"], i["since"]))
+    return items[:40]
+
+
+def cluster_performance(cases):
+    """Per cluster: what the cluster commander answers for."""
+    rows = {}
+    for key in list(geo.CLUSTERS):
+        mine = [c for c in cases if c["cluster"] == key]
+        responded = [c for c in mine if c.get("first_action_at")]
+        avg = round(sum(c["first_action_at"] - c["created_at"] for c in responded) / len(responded)) if responded else 0
+        rows[key] = {
+            "name": geo.name(key), "received": len(mine),
+            "open": sum(1 for c in mine if c["status"] != "closed"),
+            "closed_pct": round(100 * sum(1 for c in mine if c["status"] == "closed") / len(mine)) if mine else 0,
+            "avg_first_response_s": avg,
+            "past_limit": sum(1 for c in mine if c["status"] != "closed" and sla_level(c) == "red"),
+        }
+    return rows
 
 
 # ----------------------------------------------------------------------------- board stats
@@ -743,7 +1025,8 @@ def stats(store, cases, tips, refs):
         "avg_first_response_s": avg_resp,
         "referrals_out": len(refs),
         "referrals_done": sum(1 for r in refs if r["status"] == "completed"),
-        "escalated_unacknowledged": sum(1 for x in tips if x["status"] == "escalated"),
+        "hq_referrals_waiting": sum(1 for x in tips if x["status"] == "referred"),
+        "tips_by_status": {k: sum(1 for x in tips if x["status"] == k) for k in ("new", "verified", "referred", "acknowledged", "directed", "closed")},
         "by_kind": by_kind,
         "by_cluster": by_cluster,
         "series": series,

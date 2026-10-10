@@ -44,6 +44,7 @@ def citizen_config():
         "tip_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.TIP_TYPES.items()],
         "area_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.AREA_TYPES.items()],
         "clusters": geo.cluster_options(),
+        "genders": taxonomy.GENDERS, "age_bands": taxonomy.AGE_BANDS,
     })
 
 
@@ -70,6 +71,15 @@ def _alert_friend(case):
         + "If you think they are in danger call 10111."
     )
     telephony.send_whatsapp(case["friend"], text)
+
+
+@bp.get("/c/tip/<code>")
+def tip_status(code):
+    """Anonymous follow-up: the one-time code shows how far a tip has got. No identity is involved."""
+    st = service.tip_public_status(store(), code)
+    if st is None:
+        return jsonify({"error": "No tip has that code."}), 404
+    return jsonify(st)
 
 
 @bp.post("/c/call/start")
@@ -245,6 +255,22 @@ def staff_end(cid):
     return jsonify({"ok": True})
 
 
+@bp.post("/staff/case/<cid>/dispatch")
+@security.login_required("desk")
+def staff_dispatch(cid):
+    _, officer = security.current()
+    dep = service.dispatch(store(), cid, officer, body())
+    return jsonify({"ok": True, "deployment": dep})
+
+
+@bp.post("/staff/case/<cid>/deployment/<did>")
+@security.login_required("desk")
+def staff_deployment(cid, did):
+    _, officer = security.current()
+    service.update_deployment(store(), cid, did, officer, body().get("status"))
+    return jsonify({"ok": True})
+
+
 @bp.post("/staff/case/<cid>/refer")
 @security.login_required("desk")
 def staff_refer(cid):
@@ -254,18 +280,42 @@ def staff_refer(cid):
 
 
 @bp.post("/staff/referral/<rid>")
-@security.login_required("desk")
+@security.login_required("desk", "board")
 def staff_referral(rid):
     _, officer = security.current()
     ref = service.update_referral(store(), rid, officer, body().get("status"))
     return jsonify({"ok": True, "referral": ref})
 
 
-@bp.post("/staff/tip/<tid>/escalate")
+@bp.post("/staff/tip/<tid>/verify")
 @security.login_required("desk")
-def staff_escalate(tid):
+def staff_tip_verify(tid):
     _, officer = security.current()
-    tip = service.escalate_tip(store(), tid, officer)
+    tip = service.verify_tip(store(), tid, officer, body())
+    return jsonify({"ok": True, "status": tip["status"]})
+
+
+@bp.post("/staff/tip/<tid>/action")
+@security.login_required("desk")
+def staff_tip_action(tid):
+    _, officer = security.current()
+    service.action_tip(store(), tid, officer, body().get("note"))
+    return jsonify({"ok": True})
+
+
+@bp.post("/staff/tip/<tid>/refer-hq")
+@security.login_required("desk")
+def staff_tip_refer_hq(tid):
+    _, officer = security.current()
+    tip = service.refer_tip_to_hq(store(), tid, officer, body().get("note", ""))
+    return jsonify({"ok": True, "status": tip["status"]})
+
+
+@bp.post("/staff/tip/<tid>/close")
+@security.login_required("desk", "board")
+def staff_tip_close(tid):
+    role, officer = security.current()
+    tip = service.close_tip(store(), tid, officer or "EXEC", body().get("outcome"), role)
     return jsonify({"ok": True, "status": tip["status"]})
 
 
@@ -278,7 +328,7 @@ def staff_ack(tid):
 
 
 @bp.get("/staff/partners")
-@security.login_required("desk")
+@security.login_required("desk", "board")
 def staff_partners():
     return jsonify({
         "partners": sorted(store().all("partners"), key=lambda p: (p["type"], p["name"])),
@@ -304,8 +354,30 @@ def staff_audit():
     return jsonify({"audit": rows})
 
 
+@bp.get("/staff/stations")
+@security.login_required("desk", "board")
+def staff_stations():
+    return jsonify({"stations": geo.station_options(), "units": taxonomy.UNIT_KINDS})
+
+
+@bp.get("/staff/units")
+@security.login_required("desk", "board")
+def staff_units():
+    units = [p for p in store().all("partners") if p["type"] in taxonomy.SAPS_UNIT_TYPES]
+    return jsonify({"units": sorted(units, key=lambda p: (p["type"], p["name"]))})
+
+
+@bp.post("/staff/direct")
+@security.login_required("board")
+def staff_direct():
+    _, officer = security.current()
+    data = body()
+    ref = service.create_direction(store(), str(data.get("target_id") or ""), officer or "EXEC", data)
+    return jsonify({"ok": True, "direction": ref})
+
+
 @bp.get("/staff/partner/<pid>")
-@security.login_required("desk")
+@security.login_required("desk", "board")
 def staff_partner_view(pid):
     return jsonify({"items": service.partner_view(store(), pid)})
 

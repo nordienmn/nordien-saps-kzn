@@ -57,7 +57,20 @@ REFERRAL_TYPES = {
     "social_worker": "Social worker",
     "transport": "Transport",
     "municipal": "Municipality",
+    "saps_cluster": "SAPS cluster commander",
+    "saps_flying": "SAPS Flying Squad",
+    "saps_intel": "SAPS Crime Intelligence",
+    "saps_detective": "SAPS Detective Service",
 }
+# Units inside SAPS. HQ DIRECTS these; everything else is a REFERRAL out of SAPS.
+SAPS_UNIT_TYPES = {"saps_cluster", "saps_flying", "saps_intel", "saps_detective", "fcs_unit"}
+
+# Optional, self-described. Collected only when the citizen chooses to give them.
+GENDERS = ["female", "male", "other", "undisclosed"]
+AGE_BANDS = ["under_18", "18_24", "25_34", "35_49", "50_64", "65_plus", "undisclosed"]
+LANGUAGES = ["en", "zu"]
+UNIT_KINDS = ["Patrol vehicle", "Flying Squad", "FCS unit", "Detective", "Dog unit", "Public order"]
+DEPLOY_STATES = ["dispatched", "on_scene", "cleared"]
 
 STATUSES = ["new", "assigned", "in_progress", "referred", "closed"]
 KINDS = ["call", "crime", "gbv", "sos", "area"]  # tips live in their own collection

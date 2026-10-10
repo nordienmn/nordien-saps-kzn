@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAPS KZN - Get help or report (DEMO)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../design/tokens.css">
+<link rel="stylesheet" href="../design/components.css">
+<style>
+  /* Page-level only: nothing here that another page would need. */
+  .greeting { display: grid; gap: var(--space-1); padding-top: var(--space-2); }
+  .greeting p { color: var(--color-text-muted); }
+  .section-label { margin: var(--space-2) 0 calc(var(--space-1) * -1); }
+  .help-card { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: start; }
+  .help-card .icon { color: var(--status-handoff-fg); margin-top: 0.15rem; }
+  .help-card strong { display: block; }
+  .help-card a { font-weight: var(--fw-semibold); }
+  .footer { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); justify-content: center; padding: var(--space-4) var(--space-4) var(--space-8); color: var(--color-text-muted); font-size: var(--fs-sm); }
+  .footer .btn { min-height: var(--target-min); font-size: var(--fs-sm); }
+  .dialog__lang { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+</style>
+</head>
+<body class="canvas">
+<!-- icon sprite: generated from icons.svg (inline so it also works from file://) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.5h2.7a1 1 0 0 1 1 .8l.7 3.2a1 1 0 0 1-.4 1l-1.6 1.2a12 12 0 0 0 5.3 5.3l1.2-1.6a1 1 0 0 1 1-.4l3.2.7a1 1 0 0 1 .8 1v2.7a2 2 0 0 1-2.1 2A15.5 15.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/></g></symbol>
+
+<symbol id="i-end-call" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 14.6c1.2-1.6 2.7-3 4.5-3.9 3.2-1.6 7.8-1.6 11 0 1.8.9 3.3 2.3 4.5 3.9a1 1 0 0 1-.1 1.3l-2.2 2a1 1 0 0 1-1.2.1l-2.5-1.5a1 1 0 0 1-.5-.9v-1.7a9.8 9.8 0 0 0-5.6 0v1.7a1 1 0 0 1-.5.9l-2.5 1.5a1 1 0 0 1-1.2-.1l-2.2-2a1 1 0 0 1-.1-1.3z"/></g></symbol>
+
+<symbol id="i-video" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5z"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/></g></symbol>
+
+<symbol id="i-video-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 5h3A2.5 2.5 0 0 1 16 7.5v3m0 3v3a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5"/><path d="m16 10.5 4.2-2.6a.6.6 0 0 1 .8.5v7.2a.6.6 0 0 1-.8.5L16 13.5"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3M9 21h6"/></g></symbol>
+
+<symbol id="i-mic-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.2V6a3 3 0 0 1 6 0v5.5M15 12.6a3 3 0 0 1-5.4-1.1"/><path d="M5.5 11.5a6.5 6.5 0 0 0 10.6 5M18.5 11.5c0 .8-.1 1.5-.4 2.2"/><path d="M12 18v3M9 21h6"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></g></symbol>
+
+<symbol id="i-camera-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 5h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v7.2M17 19H5.5A1.5 1.5 0 0 1 4 17.5v-9A1.5 1.5 0 0 1 5.5 7H8"/><path d="M9.9 10.3a3.5 3.5 0 0 0 4.8 4.8"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-speaker" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.4a8 8 0 0 1 0 11.2"/></g></symbol>
+
+<symbol id="i-speaker-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></g></symbol>
+
+<symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/></g></symbol>
+
+<symbol id="i-shield-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 2.8v5.4c0 4.6-3 8.2-7 9.8-4-1.6-7-5.2-7-9.8V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.2-4.4"/></g></symbol>
+
+<symbol id="i-map-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></g></symbol>
+
+<symbol id="i-crosshair" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l9.2 16a1 1 0 0 1-.9 1.5H3.7a1 1 0 0 1-.9-1.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-lamp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21h5M7.5 21V8.5A4.5 4.5 0 0 1 12 4h4"/><path d="M14 4h6l-1.2 3.8h-3.6z"/><path d="M17 11v2.2M14.2 10.4l-1 1.9M19.8 10.4l1 1.9"/></g></symbol>
+
+<symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5"/><path d="M15 9h3a1 1 0 0 1 1 1v10.5"/><path d="M3 20.5h18"/><path d="M8.5 8h3M8.5 12h3M8.5 16h3"/></g></symbol>
+
+<symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6M17 14a5.5 5.5 0 0 1 3.5 5.5"/></g></symbol>
+
+<symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+
+<symbol id="i-heart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/></g></symbol>
+
+<symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.2 7.6A15.6 15.6 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.5 0 2.8-.4 4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3.5 3.5l17 17"/></g></symbol>
+
+<symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><path d="M12 14.2v2.3"/></g></symbol>
+
+<symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></g></symbol>
+
+<symbol id="i-check-circle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.7 2.7L16.2 9.4"/></g></symbol>
+
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 5 7 7-7 7"/></g></symbol>
+
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 5-7 7 7 7"/></g></symbol>
+
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9.5 7 7 7-7"/></g></symbol>
+
+<symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+
+<symbol id="i-exit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="m14 8 4 4-4 4M18 12H9"/></g></symbol>
+
+<symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21c-2.4-2.5-3.7-5.5-3.7-9S9.6 5.5 12 3z"/></g></symbol>
+
+<symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+
+<symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></g></symbol>
+
+<symbol id="i-filter" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.2V19l-4 1.5v-8.3z"/></g></symbol>
+
+<symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21h4"/></g></symbol>
+
+<symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h8M17 7h3M4 17h3M12 17h8"/><circle cx="14.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></g></symbol>
+
+<symbol id="i-record" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-chat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5l1.2-3.6A8 8 0 1 1 8.4 18.8z"/><path d="M9 10.5h6M9 13.5h4"/></g></symbol>
+
+<symbol id="i-silent-text" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor" stroke="none"/></g></symbol>
+
+<symbol id="i-send" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 3.5 3.5 10.5l6 2.5 2.5 6z"/><path d="M9.5 13l11-9.5"/></g></symbol>
+
+<symbol id="i-escalate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8.5M6 13.5l6-6 6 6M6 3.5h12"/></g></symbol>
+
+<symbol id="i-referral" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19v-5a5 5 0 0 1 5-5h10"/><path d="m15 4.5 4 4.5-4 4.5"/></g></symbol>
+
+<symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h6.5L19 9v10.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"/></g></symbol>
+
+<symbol id="i-inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 13.5 2.4-7.2a1 1 0 0 1 .95-.7h10.3a1 1 0 0 1 .95.7l2.4 7.2v5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z"/><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5"/></g></symbol>
+
+<symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 4.5-4.5 3.5 3.5 3-3 5 4.5"/></g></symbol>
+
+<symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></g></symbol>
+
+<symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.8"/><path d="M5 15.5V5.8A1 1 0 0 1 6 4.8h9.7"/></g></symbol>
+
+<symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g></symbol>
+
+<symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8z"/></g></symbol>
+
+<symbol id="i-cloud-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1.6M4.8 5.8l1.1 1.1M2.5 12.5h1.6M19.2 5.8l-1.1 1.1"/><path d="M7.2 12.6a4.3 4.3 0 0 1 8.1-1.8"/><path d="M8 20a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 10 1.38A3.3 3.3 0 0 1 17.3 20z"/></g></symbol>
+
+<symbol id="i-cloud-rain" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 7.5a4 4 0 0 1-.5 8"/><path d="M8.5 18.5l-1 2M12.5 18.5l-1 2M16.5 18.5l-1 2"/></g></symbol>
+
+<symbol id="i-wind" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.4-3.2M3 13.5h14.5a2.8 2.8 0 1 1-2.7 3.5M3 18h6"/></g></symbol>
+
+<symbol id="i-droplet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.2 6 10.5a6 6 0 0 1-12 0c0-4.3 6-10.5 6-10.5z"/></g></symbol>
+
+<symbol id="i-sunrise" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v4M7.5 5.8l1.4 1.4M16.5 5.8l-1.4 1.4"/><path d="M6.5 16a5.5 5.5 0 0 1 11 0M2.5 16h2M19.5 16h2M3.5 20h17"/></g></symbol>
+
+<symbol id="i-thermo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14.2V5a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z"/><path d="M12 9v6.5"/></g></symbol>
+
+</svg>
+
+<a class="skip-link" href="#main" data-i18n="skip">Skip to main content</a>
+
+<div class="chrome">
+  <div class="demo-banner" role="note">
+    <span class="demo-banner__tag">Demo</span>
+    <span data-i18n="demo">Demonstration only. This does not reach 10111. In an emergency, call 10111.</span>
+  </div>
+</div>
+
+<div class="app-column">
+  <header class="app-header">
+    <a class="brand" href="citizen-home.html" aria-label="SAPS KZN home">
+      <span class="brand__seal"><img src="badge.png" alt=""></span>
+      <span>
+        <span class="brand__name">SAPS KZN</span>
+        <span class="brand__sub" data-i18n="sub">South African Police Service &middot; KwaZulu-Natal</span>
+      </span>
+    </a>
+  </header>
+
+  <div class="lang-bar">
+    <span class="lang-bar__label"><svg class="icon icon--sm" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg><span data-i18n="langLabel">Language</span></span>
+    <div class="segmented" role="group" aria-label="Language">
+      <button type="button" class="segmented__btn" data-lang="en" lang="en" aria-pressed="true">English</button>
+      <button type="button" class="segmented__btn" data-lang="zu" lang="zu" aria-pressed="false">isiZulu</button>
+    </div>
+  </div>
+
+  <main id="main" class="page-pad stack stack--6">
+    <div class="greeting">
+      <h1 data-i18n="h1">How can we help?</h1>
+      <p data-i18n="lede">Choose what you need. You do not need an account.</p>
+    </div>
+
+    <!-- ONE emergency hero control -->
+    <section class="emergency" aria-labelledby="em-title">
+      <a class="emergency__main" href="citizen-call.html">
+        <span class="emergency__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg></span>
+        <span class="emergency__text">
+          <span class="emergency__title" id="em-title" data-i18n="emTitle">Emergency</span>
+          <span class="emergency__sub" data-i18n="emSub">Call the SAPS KZN desk now</span>
+        </span>
+        <svg class="icon emergency__go" aria-hidden="true" focusable="false"><use href="#i-chevron-right"/></svg>
+      </a>
+      <div class="emergency__alt">
+        <a class="emergency__alt-btn" href="citizen-call.html?video=1"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-video"/></svg><span data-i18n="emVideo">Video call</span></a>
+        <a class="emergency__alt-btn" href="citizen-call.html?silent=1"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-silent-text"/></svg><span data-i18n="emText">Can't talk? Text us</span></a>
+      </div>
+    </section>
+
+    <div class="banner banner--neutral">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-map-pin"/></svg>
+      <div><span data-i18n="loc">Your approximate location (Umlazi) is shared when you call or report.</span></div>
+    </div>
+
+    <h2 class="label-caps section-label" style="font-family:var(--font-text)" data-i18n="more">Or report something else</h2>
+
+    <nav aria-label="Reports and help" class="stack stack--3">
+      <div class="tile-grid">
+        <a class="tile" href="citizen-confirmation.html">
+          <span class="tile__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg></span>
+          <span class="tile__title" data-i18n="tCrime">Report a crime</span>
+          <span class="tile__desc" data-i18n="tCrimeD">Something has happened. Tell us, with photos if it is safe.</span>
+        </a>
+        <a class="tile tile--care" href="weather-cover.html">
+          <span class="tile__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-heart"/></svg></span>
+          <span class="tile__title" data-i18n="tGbv">Help after abuse or violence</span>
+          <span class="tile__desc" data-i18n="tGbvD">Calm, private help. You are believed.</span>
+        </a>
+        <a class="tile" href="citizen-confirmation.html?type=anonymous">
+          <span class="tile__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-eye-off"/></svg></span>
+          <span class="tile__title" data-i18n="tAnon">Report anonymously</span>
+          <span class="tile__desc" data-i18n="tAnonD">A tip with no name or number sent.</span>
+        </a>
+        <a class="tile" href="#" data-stub>
+          <span class="tile__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lamp"/></svg></span>
+          <span class="tile__title" data-i18n="tUnsafe">Unsafe place</span>
+          <span class="tile__desc" data-i18n="tUnsafeD">Dark streets, broken lights, open ditches.</span>
+        </a>
+        <a class="tile tile--wide" href="#" data-stub>
+          <span class="tile__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-user"/></svg></span>
+          <span>
+            <span class="tile__title" data-i18n="tProfile">My profile (optional)</span>
+            <span class="tile__desc" style="display:block" data-i18n="tProfileD">Add your name and photo once so reports are faster.</span>
+          </span>
+          <svg class="icon tile__go" aria-hidden="true" focusable="false"><use href="#i-chevron-right"/></svg>
+        </a>
+      </div>
+    </nav>
+
+    <aside class="card card--flat" aria-labelledby="help-title">
+      <div class="help-card">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-heart"/></svg>
+        <div class="stack stack--2">
+          <strong id="help-title" data-i18n="helpT">If it is not safe to use this app</strong>
+          <p class="text-sm muted" data-i18n="helpB">GBV Command Centre: 0800 428 428 (free, 24 hours). Or dial *120*7867# to send a Please Call Me.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <button type="button" class="btn btn--ghost" id="open-notice" data-i18n="privacy">Privacy notice</button>
+    <span aria-hidden="true" style="align-self:center">&middot;</span>
+    <span style="align-self:center">Demo build 0.1</span>
+  </footer>
+</div>
+
+<!-- POPIA notice: a real dialog. showModal() gives focus trap, inert background and Esc handling. -->
+<dialog class="dialog dialog--sheet" id="notice" aria-labelledby="notice-title" aria-describedby="notice-intro">
+  <div class="dialog__accent"></div>
+  <div class="dialog__body">
+    <div class="dialog__lang">
+      <span class="label-caps" data-i18n="langLabel">Language</span>
+      <div class="segmented" role="group" aria-label="Language">
+        <button type="button" class="segmented__btn" data-lang="en" lang="en" aria-pressed="true">English</button>
+        <button type="button" class="segmented__btn" data-lang="zu" lang="zu" aria-pressed="false">isiZulu</button>
+      </div>
+    </div>
+    <div class="stack stack--2">
+      <h2 class="dialog__title" id="notice-title" tabindex="-1" data-i18n="nTitle">Before you start</h2>
+      <p class="muted" id="notice-intro" data-i18n="nIntro">This notice is given under the Protection of Personal Information Act (POPIA).</p>
+    </div>
+    <ul class="dialog__list">
+      <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-shield"/></svg><span data-i18n="nCollect"><b>What we collect:</b> only what you type, upload or choose to share, such as a photo or your approximate location.</span></li>
+      <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file"/></svg><span data-i18n="nWhy"><b>Why:</b> so SAPS can respond to your report. It may be used as evidence.</span></li>
+      <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-users"/></svg><span data-i18n="nWho"><b>Who sees it:</b> authorised SAPS officers only. Abuse reports and anonymous tips are restricted, and every access is logged.</span></li>
+      <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-eye-off"/></svg><span data-i18n="nChoice"><b>Your choice:</b> you can report anonymously. We do not need an account.</span></li>
+    </ul>
+    <div class="banner banner--warning">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
+      <span data-i18n="nDemo"><b>This is a demonstration.</b> Nothing you enter here is sent to a real police officer.</span>
+    </div>
+  </div>
+  <div class="dialog__foot">
+    <button type="button" class="btn btn--primary btn--lg btn--block" id="agree" data-i18n="nAgree">I understand and agree</button>
+    <a class="btn btn--secondary btn--block" href="#" data-stub data-i18n="nFull">Read the full notice</a>
+    <a class="btn btn--ghost btn--block" href="tel:10111"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg><span data-i18n="nCall">In danger right now? Call 10111</span></a>
+  </div>
+</dialog>
+
+<div class="toast-region" role="status" aria-live="polite" id="toasts"></div>
+
+<aside class="mock-rail" aria-label="Mockup controls (not part of the app)">
+  <div class="mock-rail__title">Mockup controls</div>
+  <div class="mock-rail__row">
+    <button type="button" id="rail-notice">Show privacy notice</button>
+    <button type="button" id="rail-zoom" aria-pressed="false">Text size 2x</button>
+  </div>
+</aside>
+
+<script>
+/* Small inline script: language switch, notice dialog, 2x text-size test. No framework. */
+var I18N = {
+  en: {
+    skip: "Skip to main content",
+    demo: "Demonstration only. This does not reach 10111. In an emergency, call 10111.",
+    sub: "South African Police Service · KwaZulu-Natal",
+    langLabel: "Language",
+    h1: "How can we help?", lede: "Choose what you need. You do not need an account.",
+    emTitle: "Emergency", emSub: "Call the SAPS KZN desk now", emVideo: "Video call", emText: "Can't talk? Text us",
+    loc: "Your approximate location (Umlazi) is shared when you call or report.",
+    more: "Or report something else",
+    tCrime: "Report a crime", tCrimeD: "Something has happened. Tell us, with photos if it is safe.",
+    tGbv: "Help after abuse or violence", tGbvD: "Calm, private help. You are believed.",
+    tAnon: "Report anonymously", tAnonD: "A tip with no name or number sent.",
+    tUnsafe: "Unsafe place", tUnsafeD: "Dark streets, broken lights, open ditches.",
+    tProfile: "My profile (optional)", tProfileD: "Add your name and photo once so reports are faster.",
+    helpT: "If it is not safe to use this app", helpB: "GBV Command Centre: 0800 428 428 (free, 24 hours). Or dial *120*7867# to send a Please Call Me.",
+    privacy: "Privacy notice",
+    nTitle: "Before you start", nIntro: "This notice is given under the Protection of Personal Information Act (POPIA).",
+    nCollect: "<b>What we collect:</b> only what you type, upload or choose to share, such as a photo or your approximate location.",
+    nWhy: "<b>Why:</b> so SAPS can respond to your report. It may be used as evidence.",
+    nWho: "<b>Who sees it:</b> authorised SAPS officers only. Abuse reports and anonymous tips are restricted, and every access is logged.",
+    nChoice: "<b>Your choice:</b> you can report anonymously. We do not need an account.",
+    nDemo: "<b>This is a demonstration.</b> Nothing you enter here is sent to a real police officer.",
+    nAgree: "I understand and agree", nFull: "Read the full notice", nCall: "In danger right now? Call 10111"
+  },
+  zu: {
+    skip: "Eqa uye kokuqukethwe okuyinhloko",
+    demo: "I-demo kuphela. Ayifinyeleli ku-10111. Esimweni esiphuthumayo, shayela u-10111.",
+    sub: "Amaphoyisa aseNingizimu Afrika · KwaZulu-Natali",
+    langLabel: "Ulimi",
+    h1: "Singakusiza kanjani?", lede: "Khetha okudingayo. Awudingi i-akhawunti.",
+    emTitle: "Isimo esiphuthumayo", emSub: "Shayela ihhovisi le-SAPS KZN manje", emVideo: "Ucingo lwevidiyo", emText: "Awukwazi ukukhuluma? Sibhalele",
+    loc: "Indawo oyiyo ngokufanele (eMlazi) yabelwana nathi uma ushayela noma ubika.",
+    more: "Noma bika okunye",
+    tCrime: "Bika ubugebengu", tCrimeD: "Kwenzekile okuthile. Sitshele, nezithombe uma kuphephile.",
+    tGbv: "Usizo ngemva kokuhlukunyezwa", tGbvD: "Usizo oluthulile nolufihlekile. Siyakukholwa.",
+    tAnon: "Bika ungaziwa", tAnonD: "Ithiphu engathunyelwa igama noma inombolo.",
+    tUnsafe: "Indawo engaphephile", tUnsafeD: "Imigwaqo emnyama, amalambu aphukile, imisele evulekile.",
+    tProfile: "Iphrofayela yami (akuphoqelekile)", tProfileD: "Faka igama nesithombe kanye, ukuze imibiko ishesha.",
+    helpT: "Uma kungaphephile ukusebenzisa le app", helpB: "Isikhungo Sokuyalela se-GBV: 0800 428 428 (mahhala, amahora angu-24). Noma ushayele *120*7867# ukuthumela i-Please Call Me.",
+    privacy: "Isaziso sobumfihlo",
+    nTitle: "Ngaphambi kokuqala", nIntro: "Lesi saziso sinikezwa ngaphansi koMthetho Wokuvikelwa Kolwazi Lomuntu Siqu (i-POPIA).",
+    nCollect: "<b>Esikuqoqayo:</b> kuphela lokho okubhalayo, okufakayo noma okukhethayo ukukwabelana, njengesithombe noma indawo oyiyo ngokufanele.",
+    nWhy: "<b>Isizathu:</b> ukuze i-SAPS iphendule umbiko wakho. Ungasetshenziswa njengobufakazi.",
+    nWho: "<b>Obonayo:</b> amaphoyisa agunyaziwe kuphela. Imibiko yokuhlukunyezwa namathiphu angaziwa avikelwe, futhi ukufinyelela ngakunye kuyarekhodwa.",
+    nChoice: "<b>Ukhetho lwakho:</b> ungabika ungaziwa. Asidingi i-akhawunti.",
+    nDemo: "<b>Le yi-demo.</b> Akukho okufakayo lapha okuthunyelwa kwiphoyisa langempela.",
+    nAgree: "Ngiyaqonda futhi ngiyavuma", nFull: "Funda isaziso esigcwele", nCall: "Usengcupheni manje? Shayela u-10111"
+  }
+};
+var qs = new URLSearchParams(location.search);
+var lang = "en";
+try { lang = localStorage.getItem("saps-lang") || "en"; } catch (e) {}
+if (qs.get("lang")) lang = qs.get("lang");
+function setLang(l) {
+  lang = l;
+  try { localStorage.setItem("saps-lang", l); } catch (e) {}
+  document.documentElement.lang = l;
+  document.querySelectorAll("[data-i18n]").forEach(function (el) {
+    var v = I18N[l][el.getAttribute("data-i18n")];
+    if (v == null) return;
+    if (v.indexOf("<b>") > -1) el.innerHTML = v; else el.textContent = v;
+  });
+  document.querySelectorAll("[data-lang]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-lang") === l)); });
+}
+document.querySelectorAll("[data-lang]").forEach(function (b) { b.addEventListener("click", function () { setLang(b.getAttribute("data-lang")); }); });
+setLang(lang);
+
+var dlg = document.getElementById("notice");
+function openNotice() { if (!dlg.open) { dlg.showModal(); document.getElementById("notice-title").focus(); } }
+document.getElementById("agree").addEventListener("click", function () {
+  try { sessionStorage.setItem("saps-notice", "1"); } catch (e) {}
+  dlg.close();
+});
+/* A consent gate must be answered: Esc does not dismiss it. (Call 10111 stays available inside it.) */
+dlg.addEventListener("cancel", function (e) { e.preventDefault(); });
+document.getElementById("open-notice").addEventListener("click", openNotice);
+document.getElementById("rail-notice").addEventListener("click", openNotice);
+var seen = false; try { seen = sessionStorage.getItem("saps-notice") === "1"; } catch (e) {}
+if (!seen && !qs.has("nonotice")) openNotice();
+
+function toast(msg) {
+  var t = document.createElement("div"); t.className = "toast";
+  t.innerHTML = '<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span></span>';
+  t.lastChild.textContent = msg; document.getElementById("toasts").appendChild(t);
+  setTimeout(function () { t.classList.add("toast--out"); setTimeout(function () { t.remove(); }, 200); }, 3200);
+}
+document.querySelectorAll("[data-stub]").forEach(function (a) {
+  a.addEventListener("click", function (e) { e.preventDefault(); toast("This screen is specified in design-system.md and is not mocked up in this set."); });
+});
+var zoom = document.getElementById("rail-zoom");
+if (qs.get("zoom") === "2") { zoom.setAttribute("aria-pressed", "true"); document.documentElement.style.fontSize = "200%"; }
+zoom.addEventListener("click", function () {
+  var on = zoom.getAttribute("aria-pressed") !== "true";
+  zoom.setAttribute("aria-pressed", String(on));
+  document.documentElement.style.fontSize = on ? "200%" : "";
+});
+</script>
+</body>
+</html>

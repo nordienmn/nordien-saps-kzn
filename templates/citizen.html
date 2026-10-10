@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+{% block title %}SAPS KZN: get help or report{% endblock %}
+
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-{{ name }}"/></svg>
+{%- endmacro %}
+
+{% macro back() -%}
+<button type="button" class="btn btn--ghost btn--icon back-btn" data-go="home" data-i18n-aria="back" aria-label="Back">{{ icon('chevron-left') }}</button>
+{%- endmacro %}
+
+{% macro where(prefix, required=True) -%}
+<fieldset class="choice-group where" data-where="{{ prefix }}">
+  <legend data-i18n="fWhere">Where did it happen?</legend>
+  <div class="where__row">
+    <button type="button" class="btn btn--secondary" data-where-here>{{ icon('crosshair') }}<span data-i18n="useHere">Use my current location</span></button>
+    <button type="button" class="btn btn--secondary" data-where-map>{{ icon('map-pin') }}<span data-i18n="pickMap">Choose on the map</span></button>
+  </div>
+  <p class="where__status" data-where-status aria-live="polite"></p>
+  <div class="where__map" data-where-mapbox hidden></div>
+  <div class="field">
+    <label class="field__label" for="{{ prefix }}-place" data-i18n="fPlace">Place or landmark</label>
+    <input class="input" id="{{ prefix }}-place" type="text" maxlength="200" autocomplete="off" aria-describedby="{{ prefix }}-place-h">
+    <p class="field__hint" id="{{ prefix }}-place-h" data-i18n="fPlaceHint">A street, a shop, a landmark. Use the buttons above if you can.</p>
+  </div>
+</fieldset>
+{%- endmacro %}
+
+{% macro photos(prefix, max=3, hint='fPhotosHint') -%}
+<div class="field" data-photos="{{ prefix }}" data-max="{{ max }}">
+  <span class="field__label" id="{{ prefix }}-ph-l" data-i18n="fPhotos">Photos</span>
+  <p class="field__hint" data-i18n="{{ hint }}">Only take a photo if it is safe.</p>
+  <div class="thumbs" data-thumbs></div>
+  <input type="file" accept="image/*" capture="environment" hidden data-photo-input>
+  <button type="button" class="btn btn--secondary" data-photo-add aria-describedby="{{ prefix }}-ph-l">{{ icon('camera') }}<span data-i18n="fAddPhoto">Add a photo</span></button>
+</div>
+{%- endmacro %}
+
+{% block body %}
+<div class="app-column" id="app">
+  <header class="app-header">
+    <a class="brand" href="/citizen" aria-label="SAPS KZN home">
+      <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
+      <span>
+        <span class="brand__name">SAPS KZN</span>
+        <span class="brand__sub" data-i18n="sub">South African Police Service &middot; KwaZulu-Natal</span>
+      </span>
+    </a>
+  </header>
+
+  <div class="lang-bar">
+    <span class="lang-bar__label">{{ icon('globe', 'icon--sm') }}<span data-i18n="langLabel">Language</span></span>
+    <div class="segmented" role="group" aria-label="Language">
+      <button type="button" class="segmented__btn" data-lang="en" lang="en" aria-pressed="true">English</button>
+      <button type="button" class="segmented__btn" data-lang="zu" lang="zu" aria-pressed="false">isiZulu</button>
+    </div>
+  </div>
+
+  <main id="main" class="page-pad stack stack--6" tabindex="-1">
+
+    <!-- ===================== HOME ===================== -->
+    <section data-view="home" class="stack stack--6">
+      <div class="greeting">
+        <h1 data-i18n="h1">How can we help?</h1>
+        <p data-i18n="lede">Choose what you need. You do not need an account.</p>
+      </div>
+
+      <section class="emergency" aria-labelledby="em-title">
+        <button type="button" class="emergency__main" id="em-call">
+          <span class="emergency__icon">{{ icon('phone') }}</span>
+          <span class="emergency__text">
+            <span class="emergency__title" id="em-title" data-i18n="emTitle">Emergency</span>
+            <span class="emergency__sub" data-i18n="emSub">Call the SAPS KZN desk now</span>
+          </span>
+          {{ icon('chevron-right', 'emergency__go') }}
+        </button>
+        <div class="emergency__alt">
+          <button type="button" class="emergency__alt-btn" id="em-video">{{ icon('video') }}<span data-i18n="emVideo">Video call</span></button>
+          <button type="button" class="emergency__alt-btn" id="em-text">{{ icon('silent-text') }}<span data-i18n="emText">Can't talk? Text us</span></button>
+        </div>
+      </section>
+
+      <div class="banner banner--neutral">
+        {{ icon('map-pin') }}
+        <div><span data-i18n="locOn">Your approximate location is shared when you call or report.</span></div>
+      </div>
+
+      <h2 class="label-caps section-label" data-i18n="more">Or report something else</h2>
+
+      <nav aria-label="Reports and help" class="stack stack--3">
+        <div class="tile-grid">
+          <button type="button" class="tile" data-go="crime">
+            <span class="tile__icon">{{ icon('alert') }}</span>
+            <span class="tile__title" data-i18n="tCrime">Report a crime</span>
+            <span class="tile__desc" data-i18n="tCrimeD">Something has happened. Tell us, with photos if it is safe.</span>
+          </button>
+          <button type="button" class="tile tile--care" data-go="gbv">
+            <span class="tile__icon">{{ icon('heart') }}</span>
+            <span class="tile__title" data-i18n="tGbv">Help after abuse or violence</span>
+            <span class="tile__desc" data-i18n="tGbvD">Calm, private help. You are believed.</span>
+          </button>
+          <button type="button" class="tile" data-go="anon">
+            <span class="tile__icon">{{ icon('eye-off') }}</span>
+            <span class="tile__title" data-i18n="tAnon">Report anonymously</span>
+            <span class="tile__desc" data-i18n="tAnonD">A tip with no name or number sent.</span>
+          </button>
+          <button type="button" class="tile" data-go="area">
+            <span class="tile__icon">{{ icon('lamp') }}</span>
+            <span class="tile__title" data-i18n="tUnsafe">Unsafe place</span>
+            <span class="tile__desc" data-i18n="tUnsafeD">Dark streets, broken lights, open ditches.</span>
+          </button>
+          <button type="button" class="tile tile--wide" data-go="profile">
+            <span class="tile__icon">{{ icon('user') }}</span>
+            <span>
+              <span class="tile__title" data-i18n="tProfile">My profile (optional)</span>
+              <span class="tile__desc" style="display:block" data-i18n="tProfileD">Add your name and photo once so reports are faster.</span>
+            </span>
+            {{ icon('chevron-right', 'tile__go') }}
+          </button>
+        </div>
+      </nav>
+
+      <aside class="card card--flat" aria-labelledby="help-title">
+        <div class="help-card">
+          {{ icon('heart') }}
+          <div class="stack stack--2">
+            <strong id="help-title" data-i18n="helpT">If it is not safe to use this app</strong>
+            <p class="text-sm muted" data-i18n="helpB">GBV Command Centre: 0800 428 428 (free, 24 hours). Or dial *120*7867# to send a Please Call Me.</p>
+          </div>
+        </div>
+      </aside>
+
+      <aside class="card card--flat" id="wa-card" hidden>
+        <div class="help-card">
+          {{ icon('chat') }}
+          <div class="stack stack--2">
+            <strong data-i18n="tWhatsapp">Use WhatsApp instead</strong>
+            <p class="text-sm muted"><span data-i18n="tWhatsappD">Message the demo number. Same desk, same reference.</span> <span class="num" id="wa-num"></span></p>
+            <p class="text-sm muted" id="wa-hint"></p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- ===================== CRIME ===================== -->
+    <section data-view="crime" hidden class="stack stack--5">
+      <div class="view-head">{{ back() }}<h1 data-i18n="tCrime">Report a crime</h1></div>
+      <div class="banner banner--neutral draft-banner" id="c-draft" hidden>
+        <span data-i18n="draftT">You have an unfinished report.</span>
+        <span class="cluster"><button type="button" class="btn btn--secondary" id="c-draft-yes" data-i18n="draftContinue">Continue</button><button type="button" class="btn btn--ghost" id="c-draft-no" data-i18n="draftDiscard">Start again</button></span>
+      </div>
+      <form class="form" id="f-crime" novalidate>
+        <div class="field" id="c-type-f">
+          <label class="field__label" for="c-type" data-i18n="fType">What happened?</label>
+          <select class="select" id="c-type" required aria-describedby="c-type-e"></select>
+          <p class="field__error" id="c-type-e" role="alert"></p>
+        </div>
+        {{ where('c') }}
+        <div class="field">
+          <label class="field__label" for="c-time" data-i18n="fWhen">When?</label>
+          <input class="input" type="datetime-local" id="c-time" aria-describedby="c-time-h">
+          <p class="field__hint" id="c-time-h" data-i18n="fWhenHint">Leave as it is if it was just now.</p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="c-text" data-i18n="fWhat">Tell us more</label>
+          <textarea class="textarea" id="c-text" rows="4" maxlength="2000" aria-describedby="c-text-h"></textarea>
+          <p class="field__hint" id="c-text-h" data-i18n="fWhatHint">Only what you want to say. Do not put yourself at risk.</p>
+        </div>
+        {{ photos('c') }}
+        <label class="choice" id="c-profile-row" hidden>
+          <input type="checkbox" id="c-profile" checked>
+          <span><span class="choice__title" data-i18n="profileOn">Add my profile name and number</span><span class="choice__hint" id="c-profile-who"></span></span>
+        </label>
+        <p class="privacy-line" id="c-noprofile">{{ icon('info', 'icon--sm') }}<span data-i18n="profileNone">No profile. This report still goes through.</span></p>
+        <p class="error-line" id="c-error" role="alert" hidden></p>
+        <div class="sticky-action"><button type="submit" class="btn btn--primary btn--lg btn--block" id="c-submit" data-i18n="sendReport">Send report</button></div>
+      </form>
+    </section>
+
+    <!-- ===================== GBV ===================== -->
+    <section data-view="gbv" hidden class="stack stack--5">
+      <div class="view-head">{{ back() }}<h1 data-i18n="gT">Help after abuse or violence</h1>
+        <span style="margin-left:auto"><button type="button" class="quick-exit" id="g-exit" aria-describedby="g-exit-h">{{ icon('exit', 'icon--sm') }}<span data-i18n="gExit">Quick exit</span></button></span>
+      </div>
+      <p class="muted" id="g-exit-h" data-i18n="gLede">You are believed. Tell us only what you want to.</p>
+      <form class="form" id="f-gbv" novalidate>
+        <fieldset class="choice-group" id="g-safe">
+          <legend class="step-title" data-i18n="gSafeQ">Are you safe right now?</legend>
+          <label class="choice"><input type="radio" name="safe" value="yes"><span class="choice__title" data-i18n="gYes">Yes, I am safe</span></label>
+          <label class="choice"><input type="radio" name="safe" value="no"><span class="choice__title" data-i18n="gNo">No, I am not safe</span></label>
+          <label class="choice"><input type="radio" name="safe" value="unsure"><span class="choice__title" data-i18n="gUnsure">I am not sure</span></label>
+          <p class="field__error" id="g-safe-e" role="alert"></p>
+        </fieldset>
+        <div class="banner banner--danger" id="g-danger" hidden>
+          {{ icon('alert') }}
+          <div class="stack stack--2">
+            <span class="banner__title" data-i18n="gNowT">If you are in danger, call now.</span>
+            <span data-i18n="gNowB">Tap Emergency to reach the SAPS KZN desk, or dial 10111.</span>
+            <button type="button" class="btn btn--emergency" id="g-call">{{ icon('phone') }}<span data-i18n="gCallNow">Emergency call</span></button>
+          </div>
+        </div>
+        <fieldset class="choice-group">
+          <legend class="step-title" data-i18n="gHelpQ">What help would you like?</legend>
+          <p class="field__hint" data-i18n="gHelpHint">Choose any that you want.</p>
+          <label class="choice"><input type="checkbox" name="wants" value="social_worker"><span class="choice__title" data-i18n="gW1">A social worker</span></label>
+          <label class="choice"><input type="checkbox" name="wants" value="hospital"><span class="choice__title" data-i18n="gW2">A hospital or clinic</span></label>
+          <label class="choice"><input type="checkbox" name="wants" value="shelter"><span class="choice__title" data-i18n="gW3">A safe place to stay (shelter)</span></label>
+          <label class="choice"><input type="checkbox" name="wants" value="transport"><span class="choice__title" data-i18n="gW4">Transport</span></label>
+          <label class="choice"><input type="checkbox" name="wants" value="police"><span class="choice__title" data-i18n="gW5">Police to come to me</span></label>
+        </fieldset>
+        <fieldset class="choice-group">
+          <legend class="step-title" data-i18n="gKnowQ">Do you know who did this?</legend>
+          <p class="field__hint" data-i18n="gKnowHint">You do not have to say now.</p>
+          <label class="choice"><input type="radio" name="know" value="yes"><span class="choice__title" data-i18n="gKnowY">Yes</span></label>
+          <label class="choice"><input type="radio" name="know" value="no"><span class="choice__title" data-i18n="gKnowN">No</span></label>
+          <label class="choice"><input type="radio" name="know" value="skip" checked><span class="choice__title" data-i18n="gKnowS">I would rather not say</span></label>
+        </fieldset>
+        <div class="field">
+          <label class="field__label" for="g-text" data-i18n="gDetails">Anything else you want us to know</label>
+          <textarea class="textarea" id="g-text" rows="3" maxlength="2000"></textarea>
+        </div>
+        <fieldset class="choice-group" id="g-contact">
+          <legend class="step-title" data-i18n="gContactQ">May we contact you?</legend>
+          <label class="choice"><input type="radio" name="contact" value="call"><span class="choice__title" data-i18n="gContactCall">Yes, you may call me</span></label>
+          <label class="choice"><input type="radio" name="contact" value="sms"><span class="choice__title" data-i18n="gContactSms">Text message only</span></label>
+          <label class="choice"><input type="radio" name="contact" value="none" checked><span class="choice__title" data-i18n="gContactNone">No, do not contact me</span></label>
+        </fieldset>
+        <div class="field" id="g-mobile-f" hidden>
+          <label class="field__label" for="g-mobile" data-i18n="gMobile">Mobile number</label>
+          <input class="input" id="g-mobile" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" aria-describedby="g-mobile-h g-mobile-e">
+          <p class="field__hint" id="g-mobile-h" data-i18n="gMobileHint">Only used to contact you. Not shared without your agreement.</p>
+          <p class="field__error" id="g-mobile-e" role="alert"></p>
+        </div>
+        {{ where('g') }}
+        <p class="error-line" id="g-error" role="alert" hidden></p>
+        <div class="sticky-action"><button type="submit" class="btn btn--primary btn--lg btn--block" id="g-submit" data-i18n="gSend">Send for help</button></div>
+      </form>
+    </section>
+
+    <!-- ===================== ANONYMOUS ===================== -->
+    <section data-view="anon" hidden class="stack stack--5">
+      <div class="view-head">{{ back() }}<h1 data-i18n="aT">Report anonymously</h1></div>
+      <p class="muted" data-i18n="aLede">A tip, not a case. No name is stored.</p>
+      <div class="banner banner--restricted">{{ icon('lock') }}<span data-i18n="aLock">This phone sends no name, no number and no account. We do not keep a device ID.</span></div>
+      <form class="form" id="f-anon" novalidate>
+        <div class="field" id="a-type-f">
+          <label class="field__label" for="a-type" data-i18n="aWhatIs">What are you reporting?</label>
+          <select class="select" id="a-type" required aria-describedby="a-type-e"></select>
+          <p class="field__error" id="a-type-e" role="alert"></p>
+        </div>
+        {{ where('a') }}
+        <div class="field">
+          <label class="field__label" for="a-text" data-i18n="fWhat">Tell us more</label>
+          <textarea class="textarea" id="a-text" rows="4" maxlength="2000"></textarea>
+        </div>
+        {{ photos('a', 1, 'aSafe') }}
+        <p class="error-line" id="a-error" role="alert" hidden></p>
+        <div class="sticky-action"><button type="submit" class="btn btn--primary btn--lg btn--block" id="a-submit" data-i18n="aSend">Send tip</button></div>
+      </form>
+    </section>
+
+    <!-- ===================== UNSAFE PLACE ===================== -->
+    <section data-view="area" hidden class="stack stack--5">
+      <div class="view-head">{{ back() }}<h1 data-i18n="uT">Unsafe place</h1></div>
+      <p class="muted" data-i18n="uLede">Not a crime. Police can share this with the municipality.</p>
+      <form class="form" id="f-area" novalidate>
+        <div class="field" id="u-type-f">
+          <label class="field__label" for="u-type" data-i18n="uWhat">What is unsafe?</label>
+          <select class="select" id="u-type" required aria-describedby="u-type-e"></select>
+          <p class="field__error" id="u-type-e" role="alert"></p>
+        </div>
+        {{ where('u') }}
+        {{ photos('u', 1, 'aSafe') }}
+        <p class="error-line" id="u-error" role="alert" hidden></p>
+        <div class="sticky-action"><button type="submit" class="btn btn--primary btn--lg btn--block" id="u-submit" data-i18n="uSend">Send for the municipality</button></div>
+      </form>
+    </section>
+
+    <!-- ===================== PROFILE ===================== -->
+    <section data-view="profile" hidden class="stack stack--5">
+      <div class="view-head">{{ back() }}<h1 data-i18n="pT">My profile</h1></div>
+      <p class="muted" data-i18n="pLede">Optional. Saved only on this phone. Added to your reports if you choose.</p>
+      <form class="form" id="f-profile" novalidate>
+        <div class="profile-photo">
+          <span class="avatar" id="p-avatar">{{ icon('user', 'icon--xl') }}</span>
+          <div class="stack stack--2">
+            <input type="file" accept="image/*" capture="user" hidden id="p-file">
+            <button type="button" class="btn btn--secondary" id="p-take">{{ icon('camera') }}<span id="p-take-l" data-i18n="pTake">Take a photo</span></button>
+            <p class="field__hint" data-i18n="pPhotoHint">A selfie helps the desk know who is calling.</p>
+          </div>
+        </div>
+        <div class="field"><label class="field__label" for="p-name" data-i18n="pName">Name</label><input class="input" id="p-name" maxlength="80" autocomplete="name"></div>
+        <div class="field"><label class="field__label" for="p-mobile" data-i18n="pMobile">Mobile number</label><input class="input" id="p-mobile" type="tel" inputmode="tel" maxlength="20" autocomplete="tel"></div>
+        <div class="field"><label class="field__label" for="p-addr" data-i18n="pAddr">Address or area</label><input class="input" id="p-addr" maxlength="120" autocomplete="street-address"></div>
+        <p class="error-line" id="p-error" role="alert" hidden></p>
+        <div class="stack stack--3">
+          <button type="submit" class="btn btn--primary btn--lg btn--block" data-i18n="pSave">Save profile</button>
+          <button type="button" class="btn btn--ghost btn--block" id="p-clear" data-i18n="pClear">Remove profile</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ===================== DONE ===================== -->
+    <section data-view="done" hidden class="done" aria-live="polite">
+      <span class="check-badge">{{ icon('check') }}</span>
+      <div class="stack stack--2"><h1 id="d-title" data-i18n="doneT">Report received</h1><p class="muted" id="d-body" data-i18n="doneDemo">Demo: nothing here reaches a real officer.</p></div>
+      <div class="reference" id="d-ref">
+        <div><p class="reference__label" id="d-ref-l" data-i18n="doneRef">Your reference</p><p class="reference__code" id="d-ref-c"></p></div>
+        <div id="d-code-wrap" hidden>
+          <div class="reference__divider"></div>
+          <p class="reference__label" data-i18n="aCodeLead">Your one-time code. Quote it if you contact us again.</p>
+          <div class="codebox" id="d-code" aria-label="One-time code"></div>
+          <p class="muted text-sm" data-i18n="aCodeNote">We cannot show it again. Nothing links it to you.</p>
+          <button type="button" class="btn btn--secondary" id="d-copy">{{ icon('copy') }}<span data-i18n="aCopy">Copy code</span></button>
+        </div>
+        <p class="muted text-sm" id="d-keep" data-i18n="doneKeep">Keep this number. Quote it if you contact us.</p>
+      </div>
+      <div class="card card--flat done__next">
+        <h2 class="label-caps" data-i18n="doneNextT">What happens next</h2>
+        <ol><li data-i18n="doneNext1">A SAPS KZN officer reviews your report.</li><li data-i18n="doneNext2">If you gave a number, an officer may contact you.</li><li data-i18n="doneNext3">In danger right now? Call 10111.</li></ol>
+        <p class="muted text-sm" style="margin-top:var(--space-3)" data-i18n="doneSave">Save a screenshot of this screen.</p>
+      </div>
+      <div class="stack stack--3" style="width:100%">
+        <button type="button" class="btn btn--primary btn--lg btn--block" data-go="home" data-i18n="doneHome">Back to home</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <button type="button" class="btn btn--ghost" id="open-notice" data-i18n="privacy">Privacy notice</button>
+    <span aria-hidden="true" style="align-self:center">&middot;</span>
+    <span style="align-self:center"><span data-i18n="demoBuild">Demo build</span> 1.0</span>
+  </footer>
+</div>
+
+<!-- ===================== CALL (full screen) ===================== -->
+<div class="app-column" id="call-wrap" hidden>
+  <main class="call" id="call" data-state="connecting" tabindex="-1">
+    <div class="call__top">
+      <div class="pip" id="pip" hidden><video id="v-self" autoplay muted playsinline></video></div>
+      <p class="call__state" role="status" aria-live="polite" id="state-label">
+        <svg class="icon icon--sm" aria-hidden="true" focusable="false" id="state-icon"><use href="/static/img/icons.svg#i-clock"/></svg>
+        <span id="state-text">Connecting&hellip;</span>
+      </p>
+      <h1 class="call__who" data-i18n="who">SAPS KZN Control Room</h1>
+      <p class="call__timer" id="timer" role="timer" aria-live="off" aria-label="Call time"></p>
+    </div>
+    <div class="call__avatar" id="avatar" aria-hidden="true"><span class="brand__seal"><img src="/static/img/badge.png" alt=""></span></div>
+    <div class="remote" id="remote" hidden></div>
+    <ol class="stepper" aria-label="Call progress" id="stepper">
+      <li class="stepper__step" data-step="connecting" aria-current="step" data-i18n="s1">Connecting</li>
+      <li class="stepper__step" data-step="ringing" data-i18n="s2">Ringing</li>
+      <li class="stepper__step" data-step="connected" data-i18n="s3">Connected</li>
+    </ol>
+    <div class="call__facts" style="margin-top:var(--space-3)">
+      <p class="fact fact--rec">{{ icon('record') }}<span data-i18n="recOff">This call is not recorded in this demo.</span></p>
+      <p class="fact" id="loc-line">{{ icon('map-pin') }}<span id="loc-text"></span></p>
+      <p class="fact" id="ref-line" hidden>{{ icon('file') }}<span><span data-i18n="callRef">Reference</span> <span class="ref" id="call-ref" style="color:var(--color-text)"></span></span></p>
+      <p class="fact" id="queue-line" hidden>{{ icon('users') }}<span id="queue-text"></span></p>
+    </div>
+    <div class="call__body" id="call-body">
+      <p class="call-note" id="call-note" hidden></p>
+      <section class="transcript card card--sunken" id="captions" aria-labelledby="cap-title" hidden>
+        <div class="transcript__head">
+          <h2 id="cap-title" style="font-family:var(--font-text);font-size:var(--fs-base);font-weight:var(--fw-semibold)" data-i18n="capT">Messages and captions</h2>
+          <span class="chip chip--neutral" id="mode-chip" data-i18n="simText">Text only in this demo</span>
+        </div>
+        <ul class="transcript__list" id="lines" role="log" aria-live="polite" aria-relevant="additions"></ul>
+      </section>
+      <section class="state state--error" id="call-fail" hidden>
+        <span class="state__icon">{{ icon('alert') }}</span>
+        <h2 class="state__title" data-i18n="failT">We could not reach the desk</h2>
+        <p class="state__text" data-i18n="failB">Please call 10111 now.</p>
+        <a class="btn btn--emergency btn--lg" href="tel:10111">{{ icon('phone') }}<span data-i18n="failCall">Call 10111</span></a>
+        <button type="button" class="btn btn--secondary" id="call-retry" data-i18n="failRetry">Try again</button>
+      </section>
+      <section class="card summary" id="summary" aria-labelledby="sum-title" hidden>
+        <h2 id="sum-title" data-i18n="endT">Call ended</h2>
+        <div>
+          <div class="summary__row"><span class="muted" data-i18n="dur">Duration</span><span class="num" id="dur">00:00</span></div>
+          <div class="summary__row"><span class="muted" data-i18n="callRef">Reference</span><span class="ref" id="sum-ref"></span></div>
+          <div class="summary__row"><span class="muted" data-i18n="onfile">Saved to your case</span><span data-i18n="onfileV">Call details and messages</span></div>
+        </div>
+        <p class="muted text-sm" data-i18n="endNote">If you are still in danger, call 10111 now.</p>
+        <button type="button" class="btn btn--primary btn--lg btn--block" id="call-done" data-i18n="home">Back to home</button>
+      </section>
+    </div>
+    <div class="call__bottom" id="bottom">
+      <button type="button" class="silent-prompt" id="open-text" aria-haspopup="dialog">{{ icon('silent-text') }}<span data-i18n="cant">Can't talk? Tap here</span></button>
+      <div class="call-controls">
+        <button type="button" class="call-btn" id="b-mute" aria-pressed="false" disabled><span class="call-btn__disc"><svg class="icon" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-mic" id="u-mute"/></svg></span><span id="l-mute" data-i18n="mute">Mute</span></button>
+        <button type="button" class="call-btn" id="b-cam" aria-pressed="false" disabled><span class="call-btn__disc"><svg class="icon" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-camera-off" id="u-cam"/></svg></span><span data-i18n="cam">Camera</span></button>
+        <button type="button" class="call-btn" id="b-spk" aria-pressed="false" disabled><span class="call-btn__disc"><svg class="icon" aria-hidden="true" focusable="false"><use href="/static/img/icons.svg#i-speaker" id="u-spk"/></svg></span><span data-i18n="spk">Speaker</span></button>
+        <button type="button" class="call-btn call-btn--end" id="b-end" aria-label="Cancel call"><span class="call-btn__disc">{{ icon('end-call') }}</span><span id="l-end" data-i18n="cancel">Cancel</span></button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- POPIA notice: a real dialog. showModal() traps focus and makes the page behind it inert. -->
+<dialog class="dialog dialog--sheet" id="notice" aria-labelledby="notice-title" aria-describedby="notice-intro">
+  <div class="dialog__accent"></div>
+  <div class="dialog__body">
+    <div class="dialog__lang">
+      <span class="label-caps" data-i18n="langLabel">Language</span>
+      <div class="segmented" role="group" aria-label="Language">
+        <button type="button" class="segmented__btn" data-lang="en" lang="en" aria-pressed="true">English</button>
+        <button type="button" class="segmented__btn" data-lang="zu" lang="zu" aria-pressed="false">isiZulu</button>
+      </div>
+    </div>
+    <div class="stack stack--2">
+      <h2 class="dialog__title" id="notice-title" tabindex="-1" data-i18n="nTitle">Before you start</h2>
+      <p class="muted" id="notice-intro" data-i18n="nIntro">This notice is given under the Protection of Personal Information Act (POPIA).</p>
+    </div>
+    <ul class="dialog__list">
+      <li>{{ icon('shield') }}<span data-i18n-html="nCollect"></span></li>
+      <li>{{ icon('file') }}<span data-i18n-html="nWhy"></span></li>
+      <li>{{ icon('users') }}<span data-i18n-html="nWho"></span></li>
+      <li>{{ icon('clock') }}<span data-i18n-html="nKeep"></span></li>
+      <li>{{ icon('eye-off') }}<span data-i18n-html="nChoice"></span></li>
+    </ul>
+    <div class="banner banner--warning">{{ icon('info') }}<span data-i18n-html="nDemo"></span></div>
+  </div>
+  <div class="dialog__foot">
+    <button type="button" class="btn btn--primary btn--lg btn--block" id="agree" data-i18n="nAgree">I understand and agree</button>
+    <a class="btn btn--ghost btn--block" href="tel:10111">{{ icon('phone') }}<span data-i18n="nCall">In danger right now? Call 10111</span></a>
+  </div>
+</dialog>
+
+<!-- Silent text path: quick replies first (one tap), free text second. -->
+<dialog class="dialog dialog--sheet" id="text-dlg" aria-labelledby="text-title">
+  <div class="dialog__accent"></div>
+  <div class="dialog__body">
+    <div class="cluster cluster--between" style="flex-wrap:nowrap;align-items:flex-start">
+      <h2 class="dialog__title" id="text-title" tabindex="-1" data-i18n="textT">Can't talk? Send a message</h2>
+      <button type="button" class="btn btn--ghost btn--icon" id="text-x" data-i18n-aria="close" aria-label="Close">{{ icon('close') }}</button>
+    </div>
+    <p class="muted" data-i18n="textHint">The desk sees your message straight away. Your phone stays silent.</p>
+    <div class="quick-replies" role="group" aria-label="Quick messages">
+      <button type="button" class="btn btn--secondary" data-msg="q1" data-i18n="q1">I cannot speak safely</button>
+      <button type="button" class="btn btn--secondary" data-msg="q2" data-i18n="q2">Someone is in the house</button>
+      <button type="button" class="btn btn--secondary" data-msg="q3" data-i18n="q3">I need an ambulance</button>
+      <button type="button" class="btn btn--secondary" data-msg="q4" data-i18n="q4">Send help to my location</button>
+    </div>
+    <form class="field" id="text-form">
+      <label class="field__label" for="own-msg" data-i18n="own">Or type your own message</label>
+      <textarea class="textarea" id="own-msg" rows="2" style="min-height:4.5rem" maxlength="500"></textarea>
+      <button type="submit" class="btn btn--primary" style="margin-top:var(--space-2)" data-i18n="sendMsg">Send message</button>
+    </form>
+  </div>
+  <div class="dialog__foot"><button type="button" class="btn btn--ghost btn--block" id="text-back" data-i18n="backCall">Back to call</button></div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/citizen-i18n.js"></script>
+<script src="/static/js/citizen.js"></script>
+{% endblock %}

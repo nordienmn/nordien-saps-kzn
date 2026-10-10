@@ -216,15 +216,100 @@ def test_municipal_referral_only_for_area_reports(client):
     assert client.post(f"/api/staff/case/{crime}/refer", json={"partner_id": "mun-ethekwini-lights"}).status_code == 422
 
 
-def test_escalation_reaches_the_board_and_can_be_acknowledged(client):
-    tip = client.post("/api/c/report", json={"kind": "tip", "type": "drugs", **UMLAZI}).json["ref"]
-    login(client)
-    assert client.post(f"/api/staff/tip/{tip}/escalate", json={}).json["status"] == "escalated"
+def new_tip(client):
+    r = client.post("/api/c/report", json={"kind": "tip", "type": "drugs", **UMLAZI})
+    return r.json["ref"], r.json["code"]
+
+
+def test_every_tip_reaches_hq_for_oversight_before_the_desk_touches_it(client):
+    tip, _ = new_tip(client)
     login(client, "board")
-    stats = client.get("/api/staff/feed").json["stats"]
-    assert stats["escalated_unacknowledged"] >= 1
-    assert client.post(f"/api/staff/tip/{tip}/ack", json={}).json["status"] == "acknowledged"
-    assert client.get("/api/staff/feed").json["stats"]["escalated_unacknowledged"] == 0
+    feed = client.get("/api/staff/feed").json
+    row = next(t for t in feed["tips"] if t["ref"] == tip)
+    assert row["status"] == "new" and feed["insights"]["tips"]["pipeline"]["new"] >= 1
+    assert "name" not in row and row["address"] == ""  # HQ sees no address text, no identity
+
+
+def test_desk_must_verify_before_referring_a_tip_to_hq(client):
+    tip, _ = new_tip(client)
+    login(client)
+    assert client.post(f"/api/staff/tip/{tip}/refer-hq", json={}).status_code == 422
+    assert client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified"}).status_code == 422  # needs a note
+    assert client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Matched a known address."}).json["status"] == "verified"
+    assert client.post(f"/api/staff/tip/{tip}/refer-hq", json={"note": "Needs Crime Intelligence."}).json["status"] == "referred"
+
+
+def test_verified_referral_shows_as_hq_action_and_hq_can_direct_and_close(client):
+    tip, code = new_tip(client)
+    login(client)
+    client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Checked."})
+    client.post(f"/api/staff/tip/{tip}/refer-hq", json={})
+    login(client, "board")
+    feed = client.get("/api/staff/feed").json
+    assert any(a["type"] == "verified_referral" and a["ref"] == tip for a in feed["attention"])
+    assert feed["stats"]["hq_referrals_waiting"] >= 1
+    d = client.post("/api/staff/direct", json={"target_id": tip, "unit_id": "unit-intel", "instruction": "Look into this address.", "due_minutes": 90})
+    assert d.status_code == 200 and d.json["direction"]["origin"] == "board"
+    assert client.get(f"/api/c/tip/{code}").json["stage"] == "unit"
+    assert client.post(f"/api/staff/tip/{tip}/close", json={"outcome": "used"}).json["status"] == "closed"
+    pub = client.get(f"/api/c/tip/{code}").json
+    assert pub["stage"] == "closed" and "used" in pub["outcome"]
+
+
+def test_desk_cannot_close_a_tip_that_is_with_hq(client):
+    tip, _ = new_tip(client)
+    login(client)
+    client.post(f"/api/staff/tip/{tip}/verify", json={"result": "verified", "note": "Checked."})
+    client.post(f"/api/staff/tip/{tip}/refer-hq", json={})
+    assert client.post(f"/api/staff/tip/{tip}/close", json={"outcome": "no_action"}).status_code == 422
+
+
+def test_citizen_tip_follow_up_needs_the_right_code(client):
+    _, code = new_tip(client)
+    assert client.get(f"/api/c/tip/{code}").json["stage"] == "received"
+    assert client.get("/api/c/tip/AAAAAA").status_code == 404
+
+
+def test_directions_only_for_hq_and_only_to_saps_units(client):
+    tip, _ = new_tip(client)
+    login(client)
+    assert client.post("/api/staff/direct", json={"target_id": tip, "unit_id": "unit-intel", "instruction": "Do it."}).status_code == 401
+    login(client, "board")
+    assert client.post("/api/staff/direct", json={"target_id": tip, "unit_id": "shelter-durban", "instruction": "Do it."}).status_code == 422
+    assert client.post("/api/staff/direct", json={"target_id": tip, "unit_id": "unit-intel", "instruction": ""}).status_code == 422
+
+
+def test_dispatch_records_station_and_times_and_feeds_hq(client):
+    cid = client.post("/api/c/report", json={"kind": "crime", "type": "theft", **UMLAZI}).json["id"]
+    login(client)
+    d = client.get(f"/api/staff/case/{cid}").json
+    assert d["suggested_station"] == "umlazi"
+    dep = client.post(f"/api/staff/case/{cid}/dispatch", json={"station": d["suggested_station"], "unit": "Patrol vehicle"}).json["deployment"]
+    assert client.post(f"/api/staff/case/{cid}/deployment/{dep['id']}", json={"status": "on_scene"}).status_code == 200
+    assert client.post(f"/api/staff/case/{cid}/dispatch", json={"station": "nowhere"}).status_code == 422
+    login(client, "board")
+    ins = client.get("/api/staff/feed").json["insights"]
+    assert any(r["key"] == "umlazi" for r in ins["deployments_by_station"])
+    assert ins["response"]["deployments_7d"] >= 1
+
+
+def test_demographics_are_optional_grouped_and_never_itemised_for_hq(client):
+    client.post("/api/c/report", json={"kind": "crime", "type": "theft", "gender": "female", "age_band": "25_34", **UMLAZI})
+    client.post("/api/c/report", json={"kind": "crime", "type": "theft", "gender": "nonsense", "age_band": "xx", **UMLAZI})
+    login(client, "board")
+    ins = client.get("/api/staff/feed").json["insights"]
+    assert all(set(g) == {"key", "label", "n"} for g in ins["gender"])
+    assert all(v in ("<5", 0) or isinstance(v, int) for row in ins["crime_by_gender"] for k, v in row.items() if k != "label")
+    case = sorted(client.store.all("cases"), key=lambda c: -c["created_at"])[0]
+    assert case["gender"] == "undisclosed" and case["age_band"] == "undisclosed"  # unknown values are not kept
+
+
+def test_hq_map_never_carries_gbv_or_tip_points(client):
+    client.post("/api/c/report", json={"kind": "gbv", "safe_now": "yes", "contact_pref": "none", **UMLAZI})
+    login(client, "board")
+    ins = client.get("/api/staff/feed").json["insights"]
+    assert all(p["kind"] in ("crime", "call", "area") for p in ins["points"])
+    assert all(v in ("0", "<5", "5+") for v in ins["restricted_by_cluster"].values())
 
 
 def test_board_small_number_rule(client):
