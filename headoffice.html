@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SAPS KZN · Head office</title>
+<style>
+  body { margin: 0; background: #f2f2f7; color: #1c1c1e; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  header { padding: 18px 16px; background: #1c1c1e; color: #fff; display: flex; justify-content: space-between; }
+  a { color: #ffd60a; font-size: 13px; }
+  .pad { padding: 16px; max-width: 860px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 14px; padding: 12px; margin: 10px 0; cursor: grab; }
+  .cas { color: #8e8e93; font-family: ui-monospace, monospace; font-size: 13px; }
+  .zones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .zone { min-height: 80px; border: 1px dashed #1c1c1e; border-radius: 14px; padding: 12px; }
+  .zone.over { background: #ffe5e5; }
+  .gate { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .sheet { background: #fff; border-radius: 16px; padding: 20px; width: min(360px, 92%); }
+  input, button { font-family: inherit; }
+  input { width: 100%; padding: 12px; border: 0; background: #f2f2f7; border-radius: 10px; margin: 8px 0; }
+  button { width: 100%; border: 0; background: #1c1c1e; color: #fff; padding: 12px; border-radius: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="sheet">
+    <b>Head office</b>
+    <p>This door sees anonymous tips only.</p>
+    <input id="who" placeholder="Your ID" value="HO-01" />
+    <button type="button" onclick="enter()">Enter</button>
+  </div>
+</div>
+<header><b>HEAD OFFICE · ANONYMOUS ONLY</b><a href="/commissioner">Commissioner</a></header>
+<div class="pad">
+  <p id="week">This week</p>
+  <div id="list"></div>
+  <div class="zones">
+    <div class="zone" data-desk="commissioner">Commissioner</div>
+    <div class="zone" data-desk="senior">Senior manager</div>
+  </div>
+</div>
+<script>
+let tips = [], dragId = null, officer = "";
+function enter() { officer = document.getElementById("who").value || "HO-01"; document.getElementById("gate").style.display = "none"; load(); }
+async function load() {
+  const all = await (await fetch("/api/reports")).json();
+  tips = all.filter(c => c.kind === "tip");
+  const sitting = tips.filter(c => c.desk === "headoffice" && !c.verified);
+  const escalated = tips.filter(c => c.desk === "commissioner" || c.desk === "senior" || c.status === "referred");
+  document.getElementById("week").textContent = "This week · " + tips.length + " tip-offs in · " + escalated.length + " escalated · " + sitting.length + " not acted on";
+  document.getElementById("list").innerHTML = tips.map(c => `<div class="card" draggable="true" data-id="${c.id}"><div class="cas">${c.cas}</div><b>${c.label}</b><div>${c.address || "place not given"} · ${c.verified ? "verified" : "FLAGGED · not acted on"}</div><button onclick="verify('${c.id}')">Verify</button></div>`).join("") || "<p>No tips.</p>";
+  if (sitting.length) document.getElementById("list").insertAdjacentHTML("afterbegin", `<p><b>${sitting.length} tip${sitting.length > 1 ? "s" : ""} not acted on. Flagged to head office.</b></p>`);
+  document.querySelectorAll(".card").forEach(el => el.ondragstart = () => dragId = el.dataset.id);
+}
+async function verify(id) {
+  await fetch("/api/route/" + id, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ verified: true, officer, log: officer + " verified the tip." }) });
+  load();
+}
+document.querySelectorAll(".zone").forEach(z => {
+  z.ondragover = e => { e.preventDefault(); z.classList.add("over"); };
+  z.ondragleave = () => z.classList.remove("over");
+  z.ondrop = async e => {
+    e.preventDefault(); z.classList.remove("over");
+    if (!dragId) return;
+    await fetch("/api/route/" + dragId, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ desk: z.dataset.desk, officer, log: officer + " referred to " + z.textContent + "." }) });
+    load();
+  };
+});
+</script>
+</body>
+</html>

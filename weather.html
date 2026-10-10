@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cover</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+  .phone { max-width: 430px; margin: 0 auto; min-height: 100vh; }
+  .status { display: flex; justify-content: space-between; padding: 14px 22px 0; font-size: 15px; font-weight: 600; }
+  .pad { padding: 18px 20px 36px; }
+  .kicker { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; opacity: .7; }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: -.4px; margin: 4px 0 0; }
+  .hero { font-size: 92px; font-weight: 200; letter-spacing: -3px; line-height: .9; margin: 18px 0 6px; }
+  .line { font-size: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .cell { border-radius: 18px; padding: 14px 12px; }
+  .cell b { display: block; font-size: 18px; }
+  .cell span { font-size: 12px; opacity: .7; }
+  .sos { width: 100%; border: 0; border-radius: 16px; padding: 16px; font-size: 17px; font-weight: 600; margin-top: 22px; }
+  .setup-link { margin-top: 14px; font-size: 13px; opacity: .6; }
+  .panel { display: none; margin-top: 16px; background: #fff; color: #1c1c1e; border-radius: 18px; padding: 16px; }
+  label { display: block; font-size: 13px; margin: 12px 0 6px; color: #3c3c43; }
+  select, input, button.go { width: 100%; font-family: inherit; }
+  select, input { border: 0; background: #f2f2f7; border-radius: 12px; padding: 14px; font-size: 17px; }
+  button.go { border: 0; background: #007aff; color: #fff; border-radius: 14px; padding: 14px; font-weight: 600; margin-top: 14px; }
+  .ack { margin-top: 10px; color: #248a3d; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="phone" id="screen">
+  <div class="status"><span>9:41</span><span>LTE</span></div>
+  <div class="pad">
+    <div id="cover"></div>
+    <button class="sos" id="sos" type="button" onclick="sos()">More</button>
+    <div class="setup-link" onclick="openSetup()">Set up</div>
+    <div class="panel" id="setup">
+      <b>This phone</b>
+      <p>Stored here only. Used if you press the button.</p>
+      <label>Name</label><input id="nm" placeholder="Name" />
+      <label>Mobile</label><input id="mob" placeholder="Mobile" />
+      <label>A friend</label><input id="friend" placeholder="Name and number" />
+      <button class="go" type="button" onclick="save()">Save</button>
+    </div>
+    <div class="panel" id="help">
+      <b>You are believed.</b>
+      <p>Tell us only what you want.</p>
+      <label>Do you need help now?</label><select id="gbv-help"><option>Yes</option><option>Not now</option></select>
+      <label>Social worker</label><select id="gbv-sw"><option>Yes, connect me</option><option>No</option></select>
+      <label>Hospital or clinic</label><select id="gbv-hosp"><option>Yes, I need care</option><option>No</option></select>
+      <label>Can you identify the person?</label><select id="gbv-id"><option>Yes</option><option>No</option><option>I am not safe to say</option></select>
+      <label>Should someone call you now?</label><select id="gbv-call"><option>Yes, call me</option><option>No, do not call</option></select>
+      <label>Do you need transport?</label><select id="gbv-ride"><option>Yes</option><option>No</option></select>
+      <button class="go" type="button" onclick="sendHelp()">Send</button>
+      <div class="ack" id="ack"></div>
+    </div>
+  </div>
+</div>
+<script>
+const covers = [
+  { title: "Weather", place: "Durban", hero: "22°", line: "Partly cloudy", cells: [["24°","High"],["18°","Low"],["12","Wind"]], bg: "#0b1c33", fg: "#fff", cell: "rgba(255,255,255,.1)", btn: "Hourly" },
+  { title: "Tonight", place: "Kitchen", hero: "20", line: "Chicken and rice", cells: [["Easy","Level"],["4","Serves"],["1","Pan"]], bg: "#f7f3ec", fg: "#1c1c1e", cell: "#fff", btn: "Method" },
+  { title: "Next bus", place: "Berea", hero: "6", line: "M4 to the city", cells: [["On time","Status"],["12","Stop"],["R14","Fare"]], bg: "#0e241c", fg: "#fff", cell: "rgba(255,255,255,.1)", btn: "Timetable" },
+  { title: "Notices", place: "Grade 7", hero: "Fri", line: "Sports day", cells: [["08:00","Start"],["Field","Place"],["Hat","Bring"]], bg: "#f2f2f7", fg: "#1c1c1e", cell: "#fff", btn: "Notice" },
+  { title: "Scores", place: "Premier", hero: "2–1", line: "Full time", cells: [["1–0","Half"],["72'","Goal"],["Home","Venue"]], bg: "#111", fg: "#fff", cell: "rgba(255,255,255,.08)", btn: "Detail" },
+  { title: "Notes", place: "Today", hero: "3", line: "Milk, bread, airtime", cells: [["Shop","Where"],["Home","After"],["Done","Mark"]], bg: "#fff8ea", fg: "#1c1c1e", cell: "#fff", btn: "Add" },
+  { title: "Prayer", place: "This week", hero: "Sun", line: "Evening service", cells: [["18:00","Time"],["Hall","Place"],["Open","Door"]], bg: "#161226", fg: "#fff", cell: "rgba(255,255,255,.1)", btn: "Week" },
+  { title: "Market", place: "Warwick", hero: "R12", line: "Tomatoes a kilo", cells: [["Onion","R8"],["Fresh","Today"],["Cash","Only"]], bg: "#102418", fg: "#fff", cell: "rgba(255,255,255,.1)", btn: "List" },
+  { title: "Clinic", place: "Addington", hero: "Tue", line: "Baby clinic", cells: [["09:00","Time"],["Gate 2","Where"],["Card","Bring"]], bg: "#eef5f7", fg: "#1c1c1e", cell: "#fff", btn: "Booking" },
+  { title: "Radio", place: "Ukhozi FM", hero: "FM", line: "Afternoon drive", cells: [["Live","Now"],["News","Next"],["Open","Line"]], bg: "#160d12", fg: "#fff", cell: "rgba(255,255,255,.1)", btn: "On air" }
+];
+function profile() { try { return JSON.parse(localStorage.getItem("cover-profile") || "null"); } catch (e) { return null; } }
+function cover() {
+  let n = localStorage.getItem("cover-id");
+  if (n === null) { n = String(Math.floor(Math.random() * covers.length)); localStorage.setItem("cover-id", n); }
+  return covers[Number(n) % covers.length];
+}
+function paint() {
+  const c = cover();
+  const s = document.getElementById("screen");
+  s.style.background = c.bg; s.style.color = c.fg;
+  document.getElementById("cover").innerHTML = `<div class="kicker">${c.place}</div><h1>${c.title}</h1><div class="hero">${c.hero}</div><div class="line">${c.line}</div><div class="grid">${c.cells.map(x => `<div class="cell" style="background:${c.cell}"><b>${x[0]}</b><span>${x[1]}</span></div>`).join("")}</div>`;
+  const btn = document.getElementById("sos");
+  btn.textContent = c.btn;
+  btn.style.background = c.fg === "#fff" ? "rgba(255,255,255,.16)" : "#1c1c1e";
+  btn.style.color = "#fff";
+}
+function openSetup() { document.getElementById("setup").style.display = "block"; }
+function save() {
+  localStorage.setItem("cover-profile", JSON.stringify({ name: document.getElementById("nm").value, mobile: document.getElementById("mob").value, friend: document.getElementById("friend").value }));
+  document.getElementById("setup").style.display = "none";
+}
+async function sos() {
+  const p = profile();
+  let place = "location not shared";
+  try {
+    const pos = await new Promise((ok, no) => navigator.geolocation.getCurrentPosition(ok, no, { timeout: 4000 }));
+    place = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
+  } catch (e) {}
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    label: "GBV SOS", address: place, name: p ? p.name : "", mobile: p ? p.mobile : "", named: !!(p && p.name),
+    note: "Cover SOS. Friend: " + (p && p.friend ? p.friend : "none set") + ". Place: " + place
+  }) })).json();
+  document.getElementById("help").style.display = "block";
+  document.getElementById("ack").textContent = item.cas + " sent to SAPS.";
+}
+async function sendHelp() {
+  const p = profile();
+  const note = "Cover form. Help: " + document.getElementById("gbv-help").value + ". Social: " + document.getElementById("gbv-sw").value + ". Hospital: " + document.getElementById("gbv-hosp").value + ". Call: " + document.getElementById("gbv-call").value + ". Transport: " + document.getElementById("gbv-ride").value;
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "GBV", name: p ? p.name : "", mobile: p ? p.mobile : "", named: !!(p && p.name), note }) })).json();
+  document.getElementById("ack").textContent = item.cas + " sent. Same place as the SAPS door.";
+}
+paint();
+</script>
+</body>
+</html>

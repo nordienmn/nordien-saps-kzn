@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SAPS KZN</title>
+<style>
+  :root { --bg: #f2f2f7; --card: #fff; --blue: #007aff; --red: #ff3b30; --label: #3c3c43; --hair: rgba(60,60,67,.18); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #000; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; color: #1c1c1e; }
+  .phone { max-width: 430px; margin: 0 auto; background: var(--bg); min-height: 100vh; }
+  .bar { padding: 58px 22px 8px; }
+  .bar b { font-size: 40px; font-weight: 700; letter-spacing: -.6px; }
+  .bar span { display: block; color: #8e8e93; font-size: 17px; margin-top: 2px; font-weight: 400; }
+  .pad { padding: 12px 20px 40px; }
+  .sos { width: 100%; border: 0; border-radius: 22px; background: var(--red); color: #fff; font-size: 22px; font-weight: 700; padding: 28px 18px; letter-spacing: -.2px; }
+  .sos small { display: block; font-size: 14px; font-weight: 500; opacity: .85; margin-top: 6px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .tile, .plain { border: 0; border-radius: 18px; padding: 20px 14px; font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+  .tile { background: var(--card); color: #1c1c1e; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .plain { width: 100%; margin-top: 8px; background: var(--card); color: var(--blue); box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .panel { display: none; margin-top: 14px; background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  label { display: block; font-size: 13px; color: var(--label); margin: 12px 0 6px; }
+  input, select, textarea { width: 100%; border: 0; background: var(--bg); border-radius: 12px; padding: 14px; font-size: 17px; font-family: inherit; }
+  .go { width: 100%; border: 0; background: var(--blue); color: #fff; font-weight: 600; font-size: 17px; padding: 14px; border-radius: 14px; margin-top: 14px; }
+  .who { color: #8e8e93; font-size: 13px; margin: 0 0 8px; }
+  .loc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pin { height: 8px; }
+  .face { width: 96px; height: 96px; border-radius: 48px; object-fit: cover; display: block; margin: 8px auto; background: #e5e5ea; }
+  .call { display: none; margin-top: 12px; }
+  video { width: 100%; border-radius: 16px; background: #000; }
+  .ack { display: none; margin-top: 12px; color: #248a3d; font-size: 15px; }
+  .gate { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { background: #fff; width: min(430px, 100%); border-radius: 20px 20px 0 0; padding: 22px 20px 28px; }
+  .sheet h2 { margin: 0 0 8px; font-size: 22px; }
+  .sheet p { color: #3c3c43; font-size: 15px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="bar"><b>SAPS</b><span>KwaZulu-Natal</span></div>
+  <div class="pad">
+    <button class="sos" type="button" onclick="openEmergency()">Emergency<small>Call 10111, or open a video call</small></button>
+    <div class="panel" id="emergency">
+      <p class="who" id="em-who">No profile. The operator will not have your name.</p>
+      <button class="go" type="button" onclick="callNow()" style="background:#ff3b30">Call now</button>
+      <button class="go" type="button" onclick="videoCall()">Video call</button>
+    </div>
+    <div class="row">
+      <button class="tile" type="button" onclick="openPanel('crime')">Report a crime</button>
+      <button class="tile" type="button" onclick="openPanel('gbv')">GBV help</button>
+    </div>
+    <button class="plain" type="button" onclick="openPanel('anon')">Anonymous</button>
+    <button class="plain" type="button" onclick="openPanel('area')">Report an unsafe area</button>
+    <button class="plain" type="button" onclick="openPanel('profile')">Create a profile</button>
+    <div class="panel" id="crime">
+      <p class="who" id="crime-who">No profile. This report still goes through.</p>
+      <label>Type of crime</label>
+      <select id="crime-type"><option>Armed robbery</option><option>Shooting</option><option>House break-in</option><option>Domestic violence</option><option>GBV</option><option>Suspicious vehicle</option><option>Theft</option></select>
+      <label>Time</label><input id="crime-time" type="datetime-local" />
+      <label>Place</label><input id="crime-where" placeholder="Street, suburb, landmark" />
+      <label>Description</label><textarea id="crime-text" rows="3" placeholder="What happened"></textarea>
+      <label>Evidence</label>
+      <p class="who">Take it now. It stays on this phone until you send. Keep pictures, voice notes and video, especially for GBV.</p>
+      <input id="crime-pic" type="file" accept="image/*" capture="environment" />
+      <input id="crime-media" type="file" accept="audio/*,video/*" capture="environment" />
+      <button class="shot" type="button" onclick="keepEvidence()">Keep on this phone</button>
+      <button class="go" type="button" onclick="reportCrime()">Send report</button>
+    </div>
+    <div class="panel" id="anon">
+      <p class="who">A tip, not a case. No name is stored.</p>
+      <label>Type</label>
+      <select id="anon-type"><option>Armed robbery</option><option>Shooting</option><option>House break-in</option><option>Domestic violence</option><option>Suspicious vehicle</option></select>
+      <label>Place</label><input id="anon-where" placeholder="Street, suburb, landmark" />
+      <label>Photo</label><input id="anon-pic" type="file" accept="image/*" capture="environment" />
+      <label>Video</label><input id="anon-vid" type="file" accept="video/*" capture="environment" />
+      <button class="go" type="button" onclick="reportAnon()">Send tip</button>
+    </div>
+    <div class="panel" id="gbv">
+      <p class="who">You are believed. Tell us only what you want. This is not a form. It is help.</p>
+      <label>Do you need help now?</label>
+      <select id="gbv-help"><option>Yes</option><option>Not now</option></select>
+      <label>Social worker</label>
+      <select id="gbv-sw"><option>Yes, connect me</option><option>No</option></select>
+      <label>Hospital or clinic</label>
+      <select id="gbv-hosp"><option>Yes, I need care</option><option>No</option></select>
+      <label>Can you identify the person?</label>
+      <select id="gbv-id"><option>Yes</option><option>No</option><option>I am not safe to say</option></select>
+      <label>Their details, if you can</label>
+      <input id="gbv-who" placeholder="Name, place, description" />
+      <label>Should someone call you now?</label>
+      <select id="gbv-call"><option>Yes, call me</option><option>No, do not call</option></select>
+      <label>Do you need transport?</label>
+      <select id="gbv-ride"><option>Yes</option><option>No</option></select>
+      <label>Evidence</label>
+      <input id="gbv-pic" type="file" accept="image/*" capture="environment" />
+      <button class="shot" type="button" onclick="keepGbv()">Keep on this phone</button>
+      <button class="go" type="button" onclick="sendGbv()">Send for help</button>
+    </div>
+      <p class="who">Not a crime. Police can share this with the municipality.</p>
+      <label>What is unsafe</label>
+      <select id="area-type"><option>Dark street</option><option>Open ditch</option><option>Veld</option><option>Broken light</option><option>Overgrown path</option></select>
+      <label>Place</label>
+      <div class="loc">
+        <button type="button" class="shot" onclick="here('area-where','area-pin')">Current location</button>
+        <button type="button" class="shot" onclick="drop('area-where','area-pin')">Drop pin</button>
+      </div>
+      <input id="area-where" placeholder="Street, suburb, landmark" />
+      <div class="pin" id="area-pin"></div>
+      <label>Photo</label>
+      <input id="area-pic" type="file" accept="image/*" capture="environment" />
+      <button class="go" type="button" onclick="reportArea()">Send for the municipality</button>
+    </div>
+      <p class="who">Take the picture now. A file photo is not accepted.</p>
+      <img class="face" id="face" alt="" />
+      <button class="shot" type="button" onclick="takeFace()">Take profile picture</button>
+      <input id="cam" type="file" accept="image/*" capture="user" hidden />
+      <label>Name</label><input id="nm" placeholder="Name" />
+      <label>Mobile</label><input id="mob" placeholder="Mobile" />
+      <label>Address</label><input id="addr" placeholder="Address" />
+      <button class="go" type="button" onclick="saveProfile()">Save profile</button>
+    </div>
+    <div class="call" id="call"><video id="preview" autoplay muted playsinline></video></div>
+    <div class="ack" id="ack"></div>
+  </div>
+</div>
+<div class="gate" id="gate">
+  <div class="sheet">
+    <h2>Before you use this</h2>
+    <p>This notice is under the Protection of Personal Information Act. What you send — a report, a photo, a voice note, a video, or your profile — is received by the South African Police Service.</p>
+    <p>Once submitted, that content is owned by the police. It may be used as evidence if needed.</p>
+    <button class="go" type="button" onclick="accept()">I agree</button>
+  </div>
+</div>
+<script>
+let faceData = "";
+function profile() { try { return JSON.parse(localStorage.getItem("saps-profile") || "null"); } catch (e) { return null; } }
+function paint() {
+  const p = profile();
+  document.getElementById("crime-who").textContent = p ? "Profile on this report: " + p.name : "No profile. This report still goes through.";
+  if (p && p.face) { faceData = p.face; document.getElementById("face").src = p.face; }
+  if (p) document.getElementById("crime-where").value = p.address || "";
+}
+function here(field, pin) {
+  if (!navigator.geolocation) return ack("Location is off.");
+  navigator.geolocation.getCurrentPosition(pos => {
+    const text = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
+    document.getElementById(field).value = text;
+    document.getElementById(pin).textContent = "Current location set.";
+  }, () => ack("Allow location to use current place."));
+}
+function drop(field, pin) {
+  const text = (-29.85 + Math.random() * 0.1).toFixed(5) + ", " + (31.02 + Math.random() * 0.1).toFixed(5);
+  document.getElementById(field).value = text;
+  document.getElementById(pin).textContent = "Pin dropped in KZN.";
+}
+  document.querySelectorAll(".panel").forEach(el => el.style.display = el.id === id ? "block" : "none");
+  paint();
+}
+function takeFace() { document.getElementById("cam").click(); }
+document.getElementById("cam").onchange = () => {
+  const file = document.getElementById("cam").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { faceData = reader.result; document.getElementById("face").src = faceData; };
+  reader.readAsDataURL(file);
+};
+function saveProfile() {
+  if (!faceData) return ack("Take the picture first. It must be taken now.");
+  const p = { name: document.getElementById("nm").value.trim(), mobile: document.getElementById("mob").value.trim(), address: document.getElementById("addr").value.trim(), face: faceData };
+  if (!p.name || !p.mobile) return;
+  localStorage.setItem("saps-profile", JSON.stringify(p));
+  ack("Profile saved. Picture taken on this phone.");
+  openPanel("crime");
+}
+function ack(text) { const el = document.getElementById("ack"); el.style.display = "block"; el.textContent = text; }
+function openEmergency() {
+  openPanel("emergency");
+  const p = profile();
+  document.getElementById("em-who").textContent = p ? "Operator will see " + p.name + " · " + p.mobile + " · " + p.address : "No profile. The call still goes through.";
+}
+function callNow() { ack("Calling 10111."); window.location.href = "tel:10111"; }
+async function videoCall() {
+  const p = profile();
+  document.getElementById("call").style.display = "block";
+  try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); const preview = document.getElementById("preview"); preview.srcObject = stream; await preview.play(); } catch (e) {}
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "Video call", name: p ? p.name : "", mobile: p ? p.mobile : "", address: p ? p.address : "", named: !!p, note: p ? "Profile and taken picture on the call." : "No profile." }) })).json();
+  ack(item.cas + " on the desk.");
+}
+function keepEvidence() {
+  const files = [];
+  const pic = document.getElementById("crime-pic").files[0];
+  const media = document.getElementById("crime-media").files[0];
+  if (pic) files.push(pic.name);
+  if (media) files.push(media.name);
+  if (!files.length) return ack("Take a picture, a voice note or a video first.");
+  const held = JSON.parse(localStorage.getItem("saps-evidence") || "[]");
+  held.push({ at: new Date().toISOString(), type: document.getElementById("crime-type").value, files });
+  localStorage.setItem("saps-evidence", JSON.stringify(held));
+  ack("Kept on this phone. Send when you can. " + held.length + " item" + (held.length > 1 ? "s" : "") + " stored.");
+}
+function keepGbv() {
+  const held = JSON.parse(localStorage.getItem("saps-evidence") || "[]");
+  held.push({ at: new Date().toISOString(), type: "GBV", files: ["kept on phone"] });
+  localStorage.setItem("saps-evidence", JSON.stringify(held));
+  ack("Kept on this phone. Send when you are safe.");
+}
+async function sendGbv() {
+  const note = [
+    "Help: " + document.getElementById("gbv-help").value,
+    "Social worker: " + document.getElementById("gbv-sw").value,
+    "Hospital: " + document.getElementById("gbv-hosp").value,
+    "Can identify: " + document.getElementById("gbv-id").value,
+    "Details: " + document.getElementById("gbv-who").value,
+    "Call now: " + document.getElementById("gbv-call").value,
+    "Transport: " + document.getElementById("gbv-ride").value
+  ].join(". ");
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    label: "GBV", cluster: "Durban Central", named: false, note
+  }) })).json();
+  ack(item.cas + " sent. Help is on the file. A person will see it.");
+}
+async function reportCrime() {
+  const p = profile();
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: document.getElementById("crime-type").value, name: p ? p.name : "", mobile: p ? p.mobile : "", address: document.getElementById("crime-where").value, named: !!p, note: "Written report. " + document.getElementById("crime-text").value }) })).json();
+  ack(item.cas + " sent.");
+}
+async function reportArea() {
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    kind: "area", label: document.getElementById("area-type").value, address: document.getElementById("area-where").value, named: false,
+    note: "Unsafe area. For the municipality. Not a case."
+  }) })).json();
+  ack(item.cas + " sent. Police can share this with the municipality.");
+}
+async function reportAnon() {
+  const item = await (await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "tip", label: document.getElementById("anon-type").value, address: document.getElementById("anon-where").value, named: false, note: "Anonymous tip. Not a case." }) })).json();
+  ack(item.cas + " sent as a tip. No name stored.");
+}
+function accept() { localStorage.setItem("saps-popia", "yes"); document.getElementById("gate").style.display = "none"; }
+if (localStorage.getItem("saps-popia") === "yes") document.getElementById("gate").style.display = "none";
+paint();
+</script>
+</body>
+</html>
