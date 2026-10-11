@@ -201,7 +201,7 @@ def test_call_lifecycle(client):
     assert client.get(f"/api/c/call/{cid}/state?t={t}").json["state"] == "ringing"
     assert client.get(f"/api/c/call/{cid}/state?t=wrong").status_code == 422
     login(client, section="call_centre")
-    assert client.post(f"/api/staff/case/{cid}/answer", json={}).json["transport"] == "text"
+    assert client.post(f"/api/staff/case/{cid}/answer", json={}).json["transport"] == "p2p"
     assert client.post(f"/api/c/call/{cid}/line", json={"t": t, "text": "I need help"}).status_code == 200
     assert client.post(f"/api/staff/case/{cid}/line", json={"text": "Where are you?"}).status_code == 200
     state = client.get(f"/api/c/call/{cid}/state?t={t}").json
@@ -494,14 +494,16 @@ def test_each_section_sees_only_its_own_work(client):
     kinds = {c["kind"] for c in client.get("/api/staff/feed").json["cases"]}
     assert kinds <= {"call"} and client.get("/api/staff/feed").json["tips"] == []
     login(client, section="desk")
-    kinds = {c["kind"] for c in client.get("/api/staff/feed").json["cases"]}
-    assert kinds <= {"crime", "area"} and "crime" in kinds
+    cases = client.get("/api/staff/feed").json["cases"]
+    kinds = {c["kind"] for c in cases}
+    assert kinds <= {"crime", "area", "call"} and "crime" in kinds
+    assert all(c["call_missed"] or c["call_state"] in ("ringing", "live") for c in cases if c["kind"] == "call")  # only calls that need someone now
     login(client, section="gbv")
     feed = client.get("/api/staff/feed").json
-    assert {c["kind"] for c in feed["cases"]} <= {"gbv", "sos"} and feed["tips"] == []
+    assert {c["kind"] for c in feed["cases"]} <= {"gbv", "sos", "call"} and feed["tips"] == []
     login(client, section="tip_line")
     feed = client.get("/api/staff/feed").json
-    assert feed["cases"] == [] and len(feed["tips"]) >= 5
+    assert {c["kind"] for c in feed["cases"]} <= {"call"} and len(feed["tips"]) >= 5
 
 
 def test_a_section_cannot_open_or_change_another_sections_files(client):

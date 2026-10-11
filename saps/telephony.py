@@ -83,3 +83,35 @@ def map_link(lat, lon):
     if lat is None or lon is None:
         return ""
     return f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=17/{lat}/{lon}"
+
+
+_ICE = {"at": 0, "servers": None}
+_STUN = [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]
+
+
+def ice_servers():
+    """Servers that help the phone and the desk find each other for a direct voice or video call.
+
+    Order of preference: ICE_SERVERS from settings, then Twilio's relay when the account settings exist, then public STUN only.
+    STUN alone works on most networks but not all mobile ones; a relay (TURN) makes it reliable.
+    """
+    import json
+    import time
+
+    if Config.ICE_SERVERS:
+        try:
+            servers = json.loads(Config.ICE_SERVERS)
+            if isinstance(servers, list) and servers:
+                return servers
+        except ValueError:
+            pass
+    if Config.TWILIO_ACCOUNT_SID and Config.TWILIO_AUTH_TOKEN:
+        if _ICE["servers"] and time.time() - _ICE["at"] < 1800:
+            return _ICE["servers"]
+        try:
+            token = _client_for_messages().tokens.create(ttl=3600)
+            _ICE.update(at=time.time(), servers=list(token.ice_servers))
+            return _ICE["servers"]
+        except Exception as exc:
+            print(f"[twilio] relay servers unavailable: {type(exc).__name__}", flush=True)
+    return _STUN

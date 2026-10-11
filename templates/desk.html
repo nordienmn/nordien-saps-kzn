@@ -89,7 +89,8 @@
       <ul class="queue" id="queue"></ul>
     </section>
     <main class="desk__main" id="main-desk">
-      <section class="incoming-wrap" id="incoming-wrap" aria-label="Incoming calls"></section>
+      <section class="call-stage" id="call-stage" aria-label="Live call" hidden></section>
+      <section class="incoming-wrap" id="incoming-wrap" aria-label="Calls"></section>
       <div id="error-slot"></div>
       <article class="casefile" id="casefile" tabindex="-1" aria-label="Case file"></article>
     </main>
@@ -129,5 +130,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/p2p.js"></script>
 <script src="/static/js/desk.js"></script>
 {% endblock %}

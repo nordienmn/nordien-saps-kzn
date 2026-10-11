@@ -450,6 +450,8 @@
     try {
       const r = await api("/api/c/call/start", { body });
       Object.assign(call, { id: r.id, ctoken: r.ctoken, ref: r.ref, video: r.video });
+      store("saps-last-call", { id: r.id, ctoken: r.ctoken, ref: r.ref, at: Date.now() });
+      resetCallHeading("who");
       $("#call-ref").textContent = r.ref; $("#sum-ref").textContent = r.ref; $("#ref-line").hidden = false;
       setState("ringing");
       startCallRecording();
@@ -461,13 +463,14 @@
 
   // The caller's own phone records the call and sends it to the file in pieces. Nothing is kept if they refuse the microphone.
   async function startCallRecording() {
-    if (!window.MediaRecorder || !navigator.mediaDevices || !call) return;
+    let resolveStream; if (call) call.streamP = new Promise((r) => { resolveStream = r; });
+    if (!window.MediaRecorder || !navigator.mediaDevices || !call) { if (resolveStream) resolveStream(null); return; }
     const id = call.id, tok = call.ctoken, mode = call.mode;
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: mode === "video" ? { facingMode: "user", width: { ideal: 640 } } : false }); }
-    catch (e) { toast(t("micOff")); return; }
-    if (!call || call.id !== id) { stream.getTracks().forEach((x) => x.stop()); return; }
-    call.stream = stream;
+    catch (e) { toast(t("micOff")); resolveStream(null); return; }
+    if (!call || call.id !== id) { stream.getTracks().forEach((x) => x.stop()); resolveStream(null); return; }
+    call.stream = stream; resolveStream(stream);
     if (mode === "video") { const v = $("#v-self"); if (v) { v.srcObject = stream; v.play().catch(() => {}); } $("#pip").hidden = false; }
     try {
       const rec = new MediaRecorder(stream, MediaRecorder.isTypeSupported("video/webm") ? { mimeType: "video/webm" } : undefined);
@@ -491,7 +494,7 @@
     });
     const iconId = { connecting: "i-clock", ringing: "i-phone", connected: "i-check-circle", ended: "i-end-call", failed: "i-alert" }[s];
     $("#state-icon").firstElementChild.setAttribute("href", "/static/img/icons.svg#" + iconId);
-    const on = s === "connected" && call.transport === "video";
+    const on = s === "connected" && (call.transport === "video" || call.transport === "p2p");
     ["b-mute", "b-cam", "b-spk"].forEach((id) => { $("#" + id).disabled = !on; });
     $("#captions").hidden = !(s === "connected" || (s === "ended" && call.lines > 0));
     $("#call-fail").hidden = s !== "failed";
@@ -507,9 +510,9 @@
     $("#b-end").setAttribute("aria-label", call.state === "connected" ? t("end") : t("cancel"));
     $("#l-mute").textContent = $("#b-mute").getAttribute("aria-pressed") === "true" ? t("unmute") : t("mute");
     if (call.state === "connected") {
-      $("#call-note").hidden = call.transport === "video";
+      $("#call-note").hidden = call.transport !== "text";
       $("#call-note").textContent = t("textOnly");
-      $("#mode-chip").textContent = call.transport === "video" ? t("simVideo") : t("simText");
+      $("#mode-chip").textContent = call.transport === "p2p" ? (call.mode === "video" ? t("liveVideo") : t("liveVoice")) : call.transport === "video" ? t("simVideo") : t("simText");
     }
   }
 
@@ -527,7 +530,7 @@
       call.transport = s.transport; call.answeredAt = s.answered_at; call.limit = s.limit_s || 60;
       setState("connected");
       startTimer();
-      if (s.transport === "video") joinVideo();
+      if (s.transport === "video") joinVideo(); else if (s.transport === "p2p") joinP2P();
     }
     if (s.state === "ended") finishCall(s);
   }
@@ -566,6 +569,7 @@
     $("#timer").textContent = "";
     setState("ended");
     announce(t("st_ended"));
+    loadOutcome(call && call.id ? { id: call.id, ctoken: call.ctoken } : null, $("#outcome"));
   }
 
   async function endCall() {
@@ -582,6 +586,101 @@
     setCallScreen(false); call = null;
     go("home"); route();
   }
+
+  // ---- direct voice and video between this phone and the control-room desk
+  let p2p = null;
+  function resetCallHeading(key) { const hd = $(".call__who"); if (hd) { hd.dataset.i18n = key; hd.textContent = t(key); } }
+  async function joinP2P() {
+    if (p2p || !call) return;
+    const id = call.id, tok = call.ctoken, video = call.mode === "video";
+    const stream = await (call.streamP || Promise.resolve(null));
+    if (!call || call.id !== id || p2p) return;
+    call.transport = "p2p"; paintCall();
+    p2p = window.SAPS_P2P.connect({
+      role: "offerer", ice: (config && config.ice) || [], stream, wantVideo: video,
+      post: (type, data) => api(`/api/c/call/${id}/signal`, { body: { t: tok, type, data } }),
+      fetchSince: async (after) => (await api(`/api/c/call/${id}/signal?t=${encodeURIComponent(tok)}&after=${after}`)).messages,
+      onTrack: attachRemote,
+    });
+    $("#b-cam").setAttribute("aria-pressed", String(video && !!stream && stream.getVideoTracks().length > 0));
+    startCaptions();
+  }
+  function attachRemote(stream) {
+    let a = document.getElementById("a-remote");
+    if (!a) { a = document.createElement("audio"); a.id = "a-remote"; a.autoplay = true; a.setAttribute("playsinline", ""); document.body.appendChild(a); }
+    if (a.srcObject !== stream) { a.srcObject = stream; a.play().catch(() => {}); }
+    if (stream.getVideoTracks().length && !$("#remote video")) {
+      const v = document.createElement("video"); v.autoplay = true; v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = stream;
+      clear($("#remote")); $("#remote").appendChild(v); $("#remote").hidden = false; $("#avatar").hidden = true; v.play().catch(() => {});
+    }
+  }
+
+  // ---- what the caller sees after a call: who has the file, where it is going, what to do now
+  async function loadOutcome(lc, box) {
+    if (!lc || !box) return;
+    let s; try { s = await api(`/api/c/call/${lc.id}/state?t=${encodeURIComponent(lc.ctoken)}`); } catch (e) { return; }
+    renderOutcome(box, s.case);
+  }
+  function renderOutcome(box, c) {
+    clear(box);
+    if (!c) return;
+    const row = (label, ...val) => h("div.outcome__row", h("dt", { text: label }), h("dd", ...val));
+    const going = c.going.length ? h("dd", ...c.going.map((g) => h("div", { text: t(g.kind === "station" ? "goStation" : "goPartner", { name: g.name }) + (g.unit ? " · " + g.unit : "") + " (" + g.status.replace(/_/g, " ") + ")" }))) : h("dd", { text: t("outNone") });
+    box.append(h("h3", { text: t("outT"), style: "font-size:var(--fs-base);font-weight:var(--fw-semibold)" }),
+      h("dl", { style: "display:grid;gap:var(--space-2);margin:0" },
+        row(t("callRef"), h("span.ref", { text: c.ref })),
+        row(t("outStatus"), t("cs_" + c.status)),
+        row(t("outHandler"), c.handler || t("outNoHandler")),
+        h("div.outcome__row", h("dt", { text: t("outGoing") }), going),
+        row(t("outCas"), c.cas || t("casPending"))),
+      h("ul.outcome__next", ...c.next.map((k) => h("li", { text: t("adv_" + k) }))),
+      h("p.outcome__note", { text: t("outNote") }));
+  }
+
+  // ---- the desk calling this phone back, and messages about a missed call. The app checks quietly while it is open.
+  let ringLc = null, ringState = null, cbDismissed = "", ringBeep = null;
+  const lastCall = () => { const v = store("saps-last-call"); return v && Date.now() - v.at < 864e5 ? v : null; };
+  function showRing(lc, s) {
+    const wrap = $("#ring"); ringLc = lc; ringState = s;
+    if (wrap.hidden) {
+      wrap.hidden = false; announce(t("ringT"));
+      $("#ring-sub").textContent = s.ring_mode === "video" ? t("liveVideo") : t("liveVoice");
+      if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
+      try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); ringBeep = setInterval(() => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.25); }, 1500); } catch (e) { /* silent ring */ }
+    }
+  }
+  function hideRing() { clearInterval(ringBeep); ringBeep = null; $("#ring").hidden = true; ringLc = null; }
+  async function acceptRing() {
+    const lc = ringLc, s = ringState; hideRing();
+    if (!lc || callOpen) return;
+    try { await api(`/api/c/call/${lc.id}/ring/answer`, { body: { t: lc.ctoken } }); } catch (e) { toast(t("ringGone")); return; }
+    setCallScreen(true);
+    call = { id: lc.id, ctoken: lc.ctoken, ref: lc.ref, mode: s.ring_mode, state: "ringing", lines: 0, answeredAt: 0, transport: "p2p", point: null };
+    clear($("#lines")); $("#captions").hidden = true; $("#summary").hidden = true; $("#call-fail").hidden = true; $("#call-note").hidden = true;
+    $("#bottom").hidden = false; $("#stepper").hidden = false; $("#queue-line").hidden = true; $("#timer").textContent = "";
+    $("#remote").hidden = true; $("#avatar").hidden = false; $("#pip").hidden = true; clear($("#remote"));
+    $("#call-ref").textContent = lc.ref; $("#sum-ref").textContent = lc.ref; $("#ref-line").hidden = false;
+    resetCallHeading("whoIn");
+    setState("ringing");
+    startCallRecording();
+    pollTimer = setInterval(pollCall, 1000); pollCall();
+  }
+  async function declineRing() { const lc = ringLc; hideRing(); if (lc) { try { await api(`/api/c/call/${lc.id}/ring/decline`, { body: { t: lc.ctoken } }); } catch (e) { /* ok */ } } }
+  $("#ring-ans").addEventListener("click", acceptRing);
+  $("#ring-no").addEventListener("click", declineRing);
+  $("#cb-call").addEventListener("click", () => { cbDismissed = "x"; $("#cb-banner").hidden = true; startCall("voice"); });
+
+  async function idlePoll() {
+    if (callOpen || document.hidden) return;
+    const lc = lastCall(); if (!lc) { hideRing(); return; }
+    let s; try { s = await api(`/api/c/call/${lc.id}/state?t=${encodeURIComponent(lc.ctoken)}`); } catch (e) { return; }
+    if (s.ring_state === "ringing") showRing(lc, s); else if (ringLc) hideRing();
+    const showBanner = s.state === "ended" && s.missed && s.ring_state !== "ringing" && s.callback_requested && cbDismissed !== lc.id + (s.ring_state || "");
+    $("#cb-banner").hidden = !showBanner;
+    const lcCard = $("#last-call");
+    if (s.state === "ended") { lcCard.hidden = false; renderOutcome($("#lc-body"), s.case); } else lcCard.hidden = true;
+  }
+  setInterval(idlePoll, 3000); setTimeout(idlePoll, 800);
 
   // ---- Twilio Video (real voice and video) when the service has it switched on
   let videoLoading = null;
@@ -618,11 +717,16 @@
   }
   function leaveVideo() {
     try { stopCaptions(); if (videoRoom) videoRoom.disconnect(); } catch (e) { /* ok */ }
+    if (p2p) { p2p.close(); p2p = null; }
     videoRoom = null;
     $$("#a-remote").forEach((a) => a.remove());
   }
   function setTrackEnabled(kind, enabled) {
-    if (!videoRoom) return;
+    if (!videoRoom) {
+      const tracks = call && call.stream ? (kind === "audio" ? call.stream.getAudioTracks() : call.stream.getVideoTracks()) : [];
+      tracks.forEach((x) => { x.enabled = enabled; });
+      return;
+    }
     const pubs = kind === "audio" ? videoRoom.localParticipant.audioTracks : videoRoom.localParticipant.videoTracks;
     pubs.forEach((pub) => { if (pub.track) { enabled ? pub.track.enable() : pub.track.disable(); } });
   }

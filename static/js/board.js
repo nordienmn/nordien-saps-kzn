@@ -61,7 +61,7 @@
 
   // ------------------------------------------------------------------ needs HQ action (slim bar + dropdown)
   const ATT_KIND = {
-    verified_referral: ["Verified referral", "escalate"], tip_waiting: ["Tip waiting", "eye-off"], unanswered_call: ["Call unanswered", "phone"],
+    verified_referral: ["Verified referral", "escalate"], tip_waiting: ["Tip waiting", "eye-off"], unanswered_call: ["Call unanswered", "phone"], missed_call: ["Missed call not returned", "phone"],
     gbv_gap: ["GBV: cannot supply", "alert"], gbv_unconfirmed: ["GBV: not confirmed", "clock"], past_limit: ["Past time limit", "clock"], direction_overdue: ["Direction overdue", "alert"], referral_unacknowledged: ["Referral not acknowledged", "referral"],
   };
   function openPanel(on) {
@@ -82,7 +82,7 @@
       h("span.actionbar__why", icon(ico, "icon--sm"), word + " · " + fmtAge(a.since, nowS())),
       h("span.actionbar__acts",
         isTip && a.type === "verified_referral" ? h("button.btn.btn--primary.btn--sm", { type: "button", onclick: () => ackTip(a.id) }, "Acknowledge") : null,
-        a.type !== "unanswered_call" ? h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => { openPanel(false); directDlg(a.id, a.ref, a.label); } }, "Direct") : null,
+        !["unanswered_call", "missed_call"].includes(a.type) ? h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => { openPanel(false); directDlg(a.id, a.ref, a.label); } }, "Direct") : null,
         isTip ? h("button.btn.btn--ghost.btn--sm", { type: "button", onclick: () => { openPanel(false); setTab("tips"); } }, "Open") : null));
   }
 
@@ -144,7 +144,7 @@
   function renderPanel() {
     const p = $("panel");
     if (S.map && S.tab !== "overview" && S.tab !== "deploy") { try { S.map.remove(); } catch (e) { /* ok */ } S.map = null; }
-    const fn = { overview, tips, deploy, people, refs, perf, shifts, audit, brief }[S.tab] || overview;
+    const fn = { overview, tips, deploy, people, refs, perf, calllog, shifts, audit, brief }[S.tab] || overview;
     const keepY = window.scrollY;
     clear(p);
     fn(p);
@@ -396,6 +396,51 @@
     const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
     return same(d, t) ? "Today" : same(d, y) ? "Yesterday" : d.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" });
   }
+  // ------------------------------------------------------------------ call log: every call, for the end-of-day review
+  const CL = { day: "today", q: "", timer: null };
+  const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Johannesburg" });
+  const dayStamp = (ts) => new Date(ts * 1000).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", timeZone: "Africa/Johannesburg" });
+  const mmss = (s) => (s == null ? "" : Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"));
+  async function calllog(p) {
+    p.appendChild(h("div.stack.stack--3",
+      h("div.banner.banner--neutral", icon("phone"), h("span", { text: "Every call received, for the end-of-day review. File number, time, duration, desk operator, nature of the call and the action taken. No names or numbers." })),
+      h("div.filter-bar",
+        h("div.filter-bar__group", h("label.filter-bar__label", { for: "cl-day", text: "Period" }),
+          h("select.select.select--compact#cl-day", ...[["today", "Today"], ["yesterday", "Yesterday"], ["7d", "Last 7 days"]].map(([v, l]) => h("option", { value: v, selected: v === CL.day ? true : null, text: l })))),
+        h("div.filter-bar__group", { style: "flex:1 1 16rem" }, h("label.filter-bar__label", { for: "cl-q", text: "Search" }),
+          h("input.input#cl-q", { type: "search", placeholder: "File number, operator, nature, action", autocomplete: "off", value: CL.q, style: "width:100%" })),
+        h("div.filter-bar__group", h("span.filter-bar__label", { text: "Take it away" }),
+          h("span.chip-row", h("a.btn.btn--secondary.btn--sm", { id: "cl-csv", href: "#", download: "" }, icon("download"), "Download (CSV)"), h("button.btn.btn--ghost.btn--sm", { type: "button", onclick: () => window.print() }, "Print")))),
+      h("div#cl-body", h("div.state", h("span.spinner"), h("p.state__text", { text: "Loading" })))));
+    $("cl-day").addEventListener("change", (e) => { CL.day = e.target.value; loadCallLog(); });
+    $("cl-q").addEventListener("input", (e) => { clearTimeout(CL.timer); CL.timer = setTimeout(() => { CL.q = e.target.value; loadCallLog(); }, 280); });
+    loadCallLog();
+  }
+  async function loadCallLog() {
+    const box = $("cl-body"); if (!box) return;
+    const qs = new URLSearchParams({ day: CL.day, q: CL.q });
+    $("cl-csv").href = "/api/staff/call-log?" + qs.toString() + "&format=csv";
+    let r; try { r = await api("/api/staff/call-log?" + qs.toString()); } catch (e) { clear(box).append(h("p.error-line", { text: e.message })); return; }
+    if (!$("cl-body")) return;
+    const s = r.summary;
+    clear(box);
+    box.appendChild(h("div.kpis", { style: "grid-template-columns: repeat(7, minmax(0, 1fr))" }, ...[["Calls", s.calls], ["Answered", s.answered], ["Missed", s.missed], ["Dropped", s.dropped], ["Not yet returned", s.not_returned], ["Average length", mmss(s.avg_duration)], ["Answered in 30 s", s.answered_30s_pct + "%"]].map(([l, v]) =>
+      h("div.kpi", h("p.kpi__label", { text: l }), h("p.kpi__value.num", { text: String(v) })))));
+    if (s.wrap_missing) box.appendChild(h("p.muted.text-sm", { text: s.wrap_missing + " answered call" + (s.wrap_missing === 1 ? " has" : "s have") + " no nature or action recorded yet. Operators add them in the call file." }));
+    if (!r.rows.length) { box.appendChild(h("div.state", h("span.state__icon", icon("phone", "icon--lg")), h("p.state__title", { text: "No calls in this period" }))); return; }
+    const resultChip = (x) => h("span.chip.chip--dot.chip--" + (x.result === "Answered" ? "success" : x.returned ? "neutral" : "warning"), { text: x.result + (x.result !== "Answered" && x.returned ? " (returned)" : "") });
+    box.appendChild(h("div.table-wrap", h("table.matrix",
+      h("thead", h("tr", ...["File / case no.", "Time", "Duration", "Desk operator", "Nature of call", "Action taken", "Result"].map((x) => h("th", { scope: "col", text: x })))),
+      h("tbody", ...r.rows.map((x) => h("tr",
+        h("th", { scope: "row", text: x.ref }),
+        h("td", { text: (CL.day === "today" ? "" : dayStamp(x.started_at) + " ") + clock(x.started_at) }),
+        h("td.num", { text: x.duration != null ? mmss(x.duration) : "-" }),
+        h("td", { text: x.operator || "-" }),
+        h("td", x.nature ? h("span", { text: x.nature }) : h("span.chip.chip--warning", { text: x.result === "Missed" ? "No call taken" : "Not recorded" })),
+        h("td", { text: x.action || "None recorded" }),
+        h("td", resultChip(x))))))));
+  }
+
   const SH = { q: "", since: "", page: 1, timer: null };
   async function shifts(p) {
     p.appendChild(h("div.stack.stack--3",

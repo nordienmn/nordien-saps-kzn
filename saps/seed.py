@@ -191,13 +191,53 @@ def seed(store):
         secs = rng.randint(70, 240)
 
         def fn(c, started=started, secs=secs, mode=mode, lines=lines):
-            c["call"] = {"state": "ended", "mode": mode, "transport": "demo", "room": "", "started_at": started, "answered_at": started + rng.randint(6, 22), "ended_at": started + secs, "operator": "Call centre", "duration": secs}
+            c["call"] = {"state": "ended", "mode": mode, "transport": "demo", "room": "", "started_at": started, "answered_at": started + rng.randint(6, 22), "ended_at": started + secs, "operator": "OP-03", "duration": secs, "missed": False, "missed_reason": "", "returned": False, "callback": None, "callbacks": [], "app_callback": None, "ring": None, "nature": "other", "outcome": "advice", "action_text": ""}
             c["transcript"] = [{"at": started + 10 + n * 15, "who": who, "text": text, "src": "caption"} for n, (who, text) in enumerate(lines)]
             c["status"] = "closed"
             c["assigned_to"] = "Call centre"
             c["first_action_at"] = c["call"]["answered_at"]
             c["closed_at"] = started + secs + 600
             c["timeline"].append({"at": started + secs, "actor": "Call centre", "text": f"Call ended. Duration {secs // 60}:{secs % 60:02d}.", "kind": "call"})
+
+        store.patch("cases", case["id"], fn)
+
+    # ---- the call log: a day of answered, missed and dropped calls, with operator, nature and action taken (HQ reviews this at the end of the day)
+    log_rows = [
+        # (hours ago, cluster, mode, seconds on the call or None, operator, nature, outcome, detail, missed reason)
+        (0.5, "umlazi", "voice", 96, "OP-03", "assault", "dispatched", "Unit from Umlazi SAPS", ""),
+        (1.1, "durban_central", "voice", 54, "OP-18", "vehicle_theft", "report", "File opened for the station", ""),
+        (1.8, "pinetown", "voice", None, "", "", "", "", "unanswered"),
+        (2.6, "inanda", "video", 140, "OP-03", "house_break_in", "dispatched", "Unit from Inanda SAPS", ""),
+        (3.4, "durban_central", "voice", 33, "OP-18", "suspicious_activity", "advice", "", ""),
+        (4.2, "umlazi", "voice", 61, "OP-03", "enquiry", "advice", "Told where to open a case", ""),
+        (5.0, "pinetown", "voice", 20, "", "", "", "", "dropped"),
+        (6.3, "richards_bay", "voice", 118, "OP-18", "armed_robbery", "dispatched", "Flying Squad and Richards Bay SAPS", ""),
+        (7.1, "durban_central", "voice", 45, "OP-03", "hoax", "hoax", "", ""),
+        (8.4, "chatsworth", "voice", None, "", "", "", "", "unanswered"),
+        (9.0, "umlazi", "voice", 77, "OP-18", "theft", "report", "", ""),
+        (11.0, "pinetown", "video", 102, "OP-03", "assault", "referred", "Referred to a clinic", ""),
+        (26.0, "durban_central", "voice", 88, "OP-18", "house_robbery", "dispatched", "Unit from Durban Central SAPS", ""),
+        (28.5, "umlazi", "voice", 40, "OP-03", "drugs", "advice", "Advised to use the tip-off line", ""),
+        (31.0, "inanda", "voice", None, "", "", "", "", "unanswered"),
+    ]
+    for i, (hrs, cluster, mode, secs, operator, nature, outcome, detail, miss) in enumerate(log_rows):
+        lat, lon, place = _where(rng, cluster)
+        case = service.create_case(store, {"kind": "call", "mode": mode, "lat": lat, "lon": lon, "address": place}, synthetic=True, created_at=t - hrs * HOUR)
+        started = t - hrs * HOUR
+
+        def fn(c, started=started, secs=secs, mode=mode, operator=operator, nature=nature, outcome=outcome, detail=detail, miss=miss):
+            answered = secs is not None and miss != "unanswered"
+            ans_at = started + rng.randint(5, 24) if answered else None
+            ended = (ans_at + secs) if answered else started + 90
+            c["call"] = {"state": "ended", "mode": mode, "transport": "demo", "room": "", "started_at": started, "answered_at": ans_at, "ended_at": ended, "operator": operator,
+                         "duration": secs if answered else 0, "missed": bool(miss), "missed_reason": miss, "returned": False, "callback": None, "callbacks": [], "app_callback": None, "ring": None,
+                         "nature": nature, "outcome": outcome, "action_text": detail}
+            c["status"] = "closed" if answered else "new"
+            if answered:
+                c["assigned_to"] = operator
+                c["first_action_at"] = ans_at
+                c["closed_at"] = ended + 300
+            c["timeline"].append({"at": ended, "actor": operator or "system", "text": ("Call ended. Duration " + f"{secs // 60}:{secs % 60:02d}.") if answered else "Missed call. Nobody answered in time. Call back.", "kind": "call"})
 
         store.patch("cases", case["id"], fn)
 

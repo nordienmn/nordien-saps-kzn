@@ -65,6 +65,16 @@
         <p data-i18n="lede">Choose what you need. You do not need an account.</p>
       </div>
 
+      <section class="card callback-card" id="cb-banner" hidden aria-labelledby="cb-title">
+        <h2 id="cb-title" data-i18n="cbT">We missed your call</h2>
+        <p data-i18n="cbB">The control room tried to reach you. Tap to call again.</p>
+        <button type="button" class="btn btn--emergency btn--lg btn--block" id="cb-call">{{ icon('phone') }}<span data-i18n="cbBtn">Call now</span></button>
+      </section>
+      <section class="card" id="last-call" hidden aria-labelledby="lc-title">
+        <h2 id="lc-title" data-i18n="lcT">Your last call</h2>
+        <div id="lc-body" class="outcome"></div>
+      </section>
+
       <section class="emergency" aria-labelledby="em-title">
         <button type="button" class="emergency__main" id="em-call">
           <span class="emergency__icon">{{ icon('phone') }}</span>
@@ -358,6 +368,17 @@
 
 <!-- ===================== CALL (full screen) ===================== -->
 <div class="app-column" id="call-wrap" hidden>
+  <div class="ring-overlay" id="ring" hidden role="alertdialog" aria-modal="true" aria-labelledby="ring-title">
+    <div class="ring-overlay__card">
+      <span class="brand__seal"><img src="/static/img/badge.png" alt=""></span>
+      <h2 id="ring-title" data-i18n="ringT">SAPS KZN Control Room is calling you</h2>
+      <p id="ring-sub" data-i18n="ringB">Answer to speak to an officer now.</p>
+      <div class="ring-overlay__actions">
+        <button type="button" class="btn btn--answer btn--lg btn--block" id="ring-ans">{{ icon('phone') }}<span data-i18n="ringAns">Answer</span></button>
+        <button type="button" class="btn btn--secondary btn--block" id="ring-no" data-i18n="ringDecl">Decline</button>
+      </div>
+    </div>
+  </div>
   <main class="call" id="call" data-state="connecting" tabindex="-1">
     <div class="call__top">
       <div class="pip" id="pip" hidden><video id="v-self" autoplay muted playsinline></video></div>
@@ -404,6 +425,7 @@
           <div class="summary__row"><span class="muted" data-i18n="callRef">Reference</span><span class="ref" id="sum-ref"></span></div>
           <div class="summary__row"><span class="muted" data-i18n="onfile">Saved to your case</span><span data-i18n="onfileV">Call details and messages</span></div>
         </div>
+        <div id="outcome" class="outcome" aria-live="polite"></div>
         <p class="muted text-sm" data-i18n="endNote">If you are still in danger, call 10111 now.</p>
         <button type="button" class="btn btn--primary btn--lg btn--block" id="call-done" data-i18n="home">Back to home</button>
       </section>
@@ -476,6 +498,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/p2p.js"></script>
 <script src="/static/js/citizen-i18n.js"></script>
 <script src="/static/js/citizen.js"></script>
 {% endblock %}

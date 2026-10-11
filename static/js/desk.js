@@ -24,7 +24,7 @@
   const GENDER = { female: "Female", male: "Male", other: "Other / self-described", undisclosed: "Not given" };
   const AGE = { under_18: "Under 18", "18_24": "18-24", "25_34": "25-34", "35_49": "35-49", "50_64": "50-64", "65_plus": "65+", undisclosed: "Not given" };
 
-  const S = { selfie: "", points: [], drag: null, recStream: null, recorder: null, me: null, feed: null, version: null, door: "calls", filter: "all", sel: null, detail: null, opened: new Set(), ringing: new Set(), stop: null, partners: null, stations: null, room: null, recog: null };
+  const S = { selfie: "", points: [], drag: null, recStream: null, recorder: null, me: null, feed: null, version: null, door: "calls", filter: "all", sel: null, detail: null, opened: new Set(), ringing: new Set(), expect: new Set(), stage: null, missedSeen: new Set(), firstFeed: false, skew: 0, stop: null, partners: null, stations: null, room: null, recog: null };
 
   // ------------------------------------------------------------------ helpers
   function toast(msg, kind) {
@@ -246,34 +246,174 @@
     if (on) { sound.enable(); sound.ring(); }
   });
 
-  // ------------------------------------------------------------------ incoming calls
-  let ringTimer = null;
+  // ------------------------------------------------------------------ calls strip: the same on every section's desk
+  // Calling is the most important thing the desk does, so it sits above everything else and is never hidden.
+  let ringTimer = null, tickTimer = null;
+  const wordy = (v) => (v && v !== "undisclosed" ? String(v).replace(/_/g, " ") : "");
+  // The caller's profile, shown when they are registered and calling from the app.
+  function callerBlock(c) {
+    const p = c.caller; if (!p) return null;
+    const meta = [p.mobile, wordy(p.gender), wordy(p.age_band)].filter(Boolean).join(" · ");
+    return h("div.caller-block",
+      p.has_photo ? h("img.caller-block__photo", { src: `/api/staff/case/${c.id}/face`, alt: "Caller's profile photo", width: "56", height: "56" }) : h("span.caller-block__photo", icon("user")),
+      h("div", h("p.caller-block__name", { text: p.name || "Caller with no profile" }),
+        meta ? h("p.caller-block__meta", { text: meta }) : null,
+        p.home_address ? h("p.caller-block__meta", { text: p.home_address }) : null,
+        p.registered ? h("span.chip.chip--success", { text: "Registered citizen" }) : null));
+  }
+  const MISS_WHY = { unanswered: "Nobody answered", caller_hung_up: "Caller hung up", dropped: "Call dropped" };
+  const sinceNow = (since) => Math.max(0, Date.now() / 1000 + (S.skew || 0) - since);
+  const agoText = (sec) => (sec < 60 ? "just now" : sec < 3600 ? Math.floor(sec / 60) + " min ago" : Math.floor(sec / 3600) + " h ago");
   function renderIncoming() {
     const wrap = $("incoming-wrap"); clear(wrap);
-    const ringing = S.feed.cases.filter((c) => c.call_state === "ringing");
+    S.skew = S.feed.now - Date.now() / 1000;
+    const calls = S.feed.cases.filter((c) => c.kind === "call");
+    const ringing = calls.filter((c) => c.call_state === "ringing");
+    const live = calls.filter((c) => c.call_state === "live");
+    const missed = calls.filter((c) => c.call_missed && !c.call_callback && c.call_state === "ended").sort((a, b) => b.call_ended_at - a.call_ended_at);
+    const pill = (n, word, tone) => h("span.chip.chip--" + (n ? tone : "neutral") + (n ? ".chip--dot" : ""), { text: n + " " + word });
+    wrap.appendChild(h("div.calls-bar" + (ringing.length ? ".calls-bar--ring" : ""),
+      h("span.calls-bar__title", icon("phone"), "Calls"),
+      h("span.calls-bar__line", ringing.length ? "Incoming call. Answer it." : live.length ? "On a call." : "Phone line open. Nobody is waiting."),
+      h("span.calls-bar__pills", pill(ringing.length, "ringing", "danger"), pill(live.length, "live", "success"), pill(missed.length, "missed", "warning"))));
     ringing.forEach((c) => {
       if (!S.ringing.has(c.id)) { S.ringing.add(c.id); sound.ring(); announce("Incoming call " + c.ref); }
-      const waited = nowSec() - c.created_at;
       wrap.appendChild(h("div.incoming-call", { role: "alert" },
-        h("div", h("p.incoming-call__name", { text: (c.call_mode === "video" ? "Video call" : "Voice call") + " · " + c.ref }),
-          h("p.incoming-call__meta", c.cluster_name + (c.has_contact ? " · profile attached" : " · no profile"))),
-        h("div.incoming-call__actions", h("p.incoming-call__timer.num", { "aria-label": "Waiting time" }, fmtClock(waited)),
+        h("div.incoming-call__icon", icon("phone")),
+        h("div", h("span.incoming-call__tag", "Incoming call"), h("p.incoming-call__name", { text: (c.call_mode === "video" ? "Video call" : "Voice call") + " · " + c.ref }),
+          callerBlock(c) || h("p.incoming-call__meta", { text: c.cluster_name + " · no profile" }),
+          c.caller ? h("p.incoming-call__meta", { text: c.cluster_name }) : null),
+        h("div.incoming-call__actions", h("p.incoming-call__timer.num", { "aria-label": "Waiting time", "data-since": String(c.created_at) }, fmtClock(sinceNow(c.created_at))),
           h("button.btn.btn--answer.btn--lg.btn--block", { type: "button", onclick: () => answer(c, false) }, icon("phone"), "Answer"),
           S.me.video && c.call_mode === "video" ? h("button.btn.btn--secondary.btn--block", { type: "button", onclick: () => answer(c, true) }, icon("video"), "Answer with video") : null)));
     });
     for (const id of Array.from(S.ringing)) if (!ringing.some((c) => c.id === id)) S.ringing.delete(id);
-    clearInterval(ringTimer);
-    if (ringing.length) ringTimer = setInterval(() => { sound.ring(); document.querySelectorAll(".incoming-call__timer").forEach((el, i) => { el.textContent = fmtClock(Date.now() / 1000 - ringing[i].created_at - (Date.now() / 1000 - (S.feed.now))); }); }, 4000);
+    live.filter((c) => !(S.stage && S.stage.id === c.id)).forEach((c) => {
+      wrap.appendChild(h("div.call-row.call-row--live",
+        h("span.call-row__icon", icon("phone")),
+        h("div.call-row__main", h("p.call-row__title", { text: "Live call · " + c.ref }), h("p.call-row__meta", { text: "Answered by " + (c.call_operator || "an officer") + " · " + c.cluster_name })),
+        h("span.call-row__timer.num", { "data-since": String(c.call_answered_at || c.created_at) }, fmtClock(sinceNow(c.call_answered_at || c.created_at))),
+        h("div.call-row__actions",
+          h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => select({ id: c.id, kind: "case" }) }, "Open call"),
+          h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => endLive(c) }, icon("end-call"), "End call"))));
+    });
+    missed.slice(0, 4).forEach((c) => {
+      if (!S.missedSeen.has(c.id)) { if (S.missedSeen.size || S.firstFeed) { sound.ring(); announce("Missed call " + c.ref); } S.missedSeen.add(c.id); }
+      wrap.appendChild(h("div.call-row.call-row--missed",
+        h("span.call-row__icon", icon("phone")),
+        h("div.call-row__main", h("p.call-row__title", { text: "Missed call · " + c.ref + (c.caller && c.caller.name ? " · " + c.caller.name : "") }),
+          h("p.call-row__meta", h("span", { text: (MISS_WHY[c.call_missed_reason] || "Missed") + " · " }), h("span", { "data-ago": String(c.call_ended_at), text: agoText(sinceNow(c.call_ended_at)) }),
+            h("span", { text: " · " + (c.has_contact ? "number on record" : "no number: reply goes to the app") + ({ ringing: " · ringing the caller's app now", no_answer: " · call-back not answered", declined: " · caller declined the call-back" }[c.call_ring] || "") }))),
+        h("div.call-row__actions",
+          h("button.btn.btn--primary.btn--sm", { type: "button", disabled: c.call_ring === "ringing" ? true : null, onclick: () => callBack(c) }, icon("phone"), c.call_ring === "ringing" ? "Ringing…" : c.call_ring ? "Try again" : "Call back"),
+          h("button.btn.btn--ghost.btn--sm", { type: "button", onclick: () => select({ id: c.id, kind: "case" }) }, "Open"))));
+    });
+    if (missed.length > 4) wrap.appendChild(h("p.muted.text-sm", { text: "+" + (missed.length - 4) + " more missed calls. The oldest are shown last." }));
+    S.firstFeed = true;
+    const mine = live.find((c) => S.expect.has(c.id) && c.call_transport === "p2p" && c.call_operator === S.me.officer);
+    if (mine && (!S.stage || S.stage.id !== mine.id)) startStage(mine);
+    if (S.stage && !live.some((c) => c.id === S.stage.id)) endStage();
+    clearInterval(ringTimer); clearInterval(tickTimer);
+    if (ringing.length) ringTimer = setInterval(() => sound.ring(), 4000);
+    tickTimer = setInterval(() => {
+      document.querySelectorAll("[data-since]").forEach((el) => { el.textContent = fmtClock(sinceNow(Number(el.dataset.since))); });
+      document.querySelectorAll("[data-ago]").forEach((el) => { el.textContent = agoText(sinceNow(Number(el.dataset.ago))); });
+    }, 1000);
+  }
+
+  async function endLive(c) {
+    try { await call(`/api/staff/case/${c.id}/end`); endStage(); leaveVideo(); toast("Call ended"); await refresh(); } catch (e) { showError(e.message); }
+  }
+
+  // A missed or dropped call is returned by ringing the caller's app, a message to the app, or a logged call on the number on record.
+  async function callBack(c) {
+    try {
+      const d = await api(`/api/staff/case/${c.id}`);
+      const options = [
+        { value: "ring_voice", label: "Ring the caller's app now (voice call)" },
+        { value: "ring_video", label: "Ring the caller's app now (video call)" },
+        { value: "app", label: "Send a call-back message to the caller's app" },
+      ];
+      if (d.mobile) options.push({ value: "phone", label: "Log a call on the number on record: " + d.mobile });
+      const v = await ask({
+        title: "Call back " + c.ref,
+        body: (d.name ? d.name + ". " : "") + "Ringing works while the caller has the app open. Otherwise they see a message the next time they open it. Demo: nothing is dialled on the phone network.",
+        fields: [{ id: "how", type: "select", label: "How", options, value: c.call_mode === "video" ? "ring_video" : "ring_voice" }, { id: "note", type: "text", label: "Note (optional)" }], ok: "Go" });
+      if (!v) return;
+      await call(`/api/staff/case/${c.id}/callback`, { method: v.how, note: v.note });
+      if (v.how.startsWith("ring")) { S.expect.add(c.id); toast("Ringing the caller's app. You will be connected when they answer."); }
+      else toast(v.how === "phone" ? "Call-back logged on the file" : "Message sent to the caller's app");
+      await refresh();
+    } catch (e) { showError(e.message); }
   }
 
   async function answer(c, video) {
     try {
       const r = await call(`/api/staff/case/${c.id}/answer`, { video });
       toast("Call answered. You are connected to the caller.");
-      setDoor("calls"); select({ id: c.id, kind: "case" });
+      if ((S.allowed || []).includes("calls")) setDoor("calls");
+      select({ id: c.id, kind: "case" });
+      S.expect.add(c.id);
       if (r.transport === "video") joinVideo(r.token, r.room, c.call_mode, c.id);
+      else if (r.transport === "p2p") startStage(Object.assign({}, c, { call_answered_at: Date.now() / 1000 + (S.skew || 0) }));
       await refresh();
     } catch (e) { showError(e.message); }
+  }
+
+  // ---- the live call: a direct voice or video connection to the caller's app, kept above everything else
+  async function startStage(c) {
+    if (S.stage) { if (S.stage.id === c.id) return; endStage(); }
+    const video = c.call_mode === "video";
+    const box = $("call-stage"); clear(box); box.hidden = false;
+    const wait = h("p.call-stage__wait", { text: "Connecting to the caller…" });
+    const remoteBox = h("div.call-stage__remote", wait);
+    const selfBox = h("div.call-stage__self", { hidden: true });
+    const state = h("span.chip.chip--neutral", { text: "Connecting" });
+    const muteB = h("button.btn.btn--secondary.btn--sm", { type: "button" }, icon("mic"), "Mute");
+    const camB = video ? h("button.btn.btn--secondary.btn--sm", { type: "button" }, icon("camera"), "Camera off") : null;
+    const stage = S.stage = { id: c.id, p2p: null, local: null };
+    muteB.onclick = () => { const tr = stage.local ? stage.local.getAudioTracks() : []; const on = tr.length && !tr[0].enabled; tr.forEach((t) => { t.enabled = !!on; }); muteB.lastChild.textContent = on ? "Mute" : "Unmute"; };
+    if (camB) camB.onclick = () => { const tr = stage.local ? stage.local.getVideoTracks() : []; const on = tr.length && !tr[0].enabled; tr.forEach((t) => { t.enabled = !!on; }); camB.lastChild.textContent = on ? "Camera off" : "Camera on"; };
+    box.append(
+      h("div.call-stage__head", h("span.call-stage__live", { text: (video ? "Video call · " : "Voice call · ") + c.ref }), state, h("span.call-stage__timer.num", { "data-since": String(c.call_answered_at || Date.now() / 1000) }, "00:00")),
+      callerBlock(c), remoteBox, selfBox,
+      h("div.call-stage__controls", muteB, camB,
+        h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => select({ id: c.id, kind: "case" }) }, icon("file"), "Open file"),
+        h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => endLive(c) }, icon("end-call"), "End call")));
+    const local = await window.SAPS_P2P.localMedia(video);
+    if (S.stage !== stage) { if (local) local.getTracks().forEach((t) => t.stop()); return; }
+    stage.local = local;
+    if (!local) toast("Your microphone is blocked. You can hear the caller but they cannot hear you. Type in the file.", "error");
+    if (local && video && local.getVideoTracks().length) {
+      const v = document.createElement("video"); v.autoplay = true; v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = local;
+      selfBox.appendChild(v); selfBox.hidden = false; v.play().catch(() => {});
+    }
+    stage.p2p = window.SAPS_P2P.connect({
+      role: "answerer", ice: (S.me && S.me.ice) || [], stream: local, wantVideo: video,
+      post: (type, data) => call(`/api/staff/case/${c.id}/signal`, { type, data }),
+      fetchSince: async (after) => (await api(`/api/staff/case/${c.id}/signal?after=${after}`)).messages,
+      onTrack: (remote) => {
+        let a = document.getElementById("a-remote");
+        if (!a) { a = document.createElement("audio"); a.id = "a-remote"; a.autoplay = true; a.setAttribute("playsinline", ""); document.body.appendChild(a); }
+        if (a.srcObject !== remote) { a.srcObject = remote; a.play().catch(() => {}); }
+        if (remote.getVideoTracks().length && !remoteBox.querySelector("video")) {
+          const v = document.createElement("video"); v.autoplay = true; v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = remote;
+          clear(remoteBox); remoteBox.appendChild(v); v.play().catch(() => {});
+        } else if (!remote.getVideoTracks().length) wait.textContent = "Connected. Voice only.";
+        S.recStream = remote;
+        if (!S.recorder) setTimeout(() => { if (S.stage === stage && !S.recorder) startRecording(c.id); }, 900);
+      },
+      onState: (st) => { state.textContent = { connected: "Connected", connecting: "Connecting", new: "Connecting", checking: "Connecting", failed: "Connection failed", slow: "Still connecting", disconnected: "Reconnecting" }[st] || st; state.className = "chip chip--" + (st === "connected" ? "success" : st === "failed" ? "danger" : "neutral"); },
+    });
+    startCaptions(c.id);
+  }
+  function endStage() {
+    const st = S.stage; if (!st) return;
+    S.stage = null;
+    try { if (st.p2p) st.p2p.close(); } catch (e) { /* ok */ }
+    try { if (st.local) st.local.getTracks().forEach((t) => t.stop()); } catch (e) { /* ok */ }
+    const box = $("call-stage"); clear(box); box.hidden = true;
+    leaveVideo();
   }
 
   // ---- video (Twilio) for officers, only when the service has it switched on
@@ -320,10 +460,10 @@
     try { if (S.recog) { const r = S.recog; S.recog = null; r.stop(); } if (S.room) S.room.disconnect(); } catch (e) { /* ok */ }
     S.room = null; document.querySelectorAll("#a-remote").forEach((a) => a.remove());
   }
-  function startCaptions() {
+  function startCaptions(forId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR || S.recog || !S.sel) return;
-    const id = S.sel.id;
+    if (!SR || S.recog || !(forId || S.sel)) return;
+    const id = forId || S.sel.id;
     S.recog = new SR(); S.recog.continuous = true; S.recog.interimResults = true; S.recog.lang = "en-ZA";
     let last = 0;
     S.recog.onresult = (ev) => { const r = ev.results[ev.results.length - 1]; const n = Date.now(); if (!r.isFinal && n - last < 600) return; last = n; call(`/api/staff/case/${id}/line`, { text: r[0].transcript, src: "caption", partial: !r.isFinal }).catch(() => {}); };
@@ -550,7 +690,8 @@
 
   function callCard(d) {
     const call = d.call || {};
-    const c = card("Call", h("span.chip.chip--neutral", { text: call.transport === "video" ? "Live video" : "Text only in this demo" }));
+    const c = card("Call", h("span.chip.chip--neutral", { text: call.transport === "p2p" ? (call.mode === "video" ? "Live video" : "Live voice") : call.transport === "video" ? "Live video" : "Text only in this demo" }));
+    if (d.name || d.mobile) c.append(h("div.caller-block", { style: "margin-bottom:var(--space-3)" }, (d.media || []).some((m) => m.type === "face") ? h("img.caller-block__photo", { src: `/api/staff/case/${d.id}/face`, alt: "Caller's profile photo", width: "56", height: "56" }) : h("span.caller-block__photo", icon("user")), h("div", h("p.caller-block__name", { text: d.name || "Caller" }), h("p.caller-block__meta", { text: [d.mobile, d.home_address].filter(Boolean).join(" · ") }), d.registered ? h("span.chip.chip--success", { text: "Registered citizen" }) : null)));
     const hasRec = (d.media || []).some((m) => m.type === "recording");
     c.append(h("p.muted.text-sm", { text: (call.mode === "video" ? "Video call" : "Voice call") + (call.operator ? " answered by " + call.operator : "") + (call.duration != null ? " · " + fmtClock(call.duration) : "") + " · Recording: " + (hasRec ? "saved on this file" : "none") }),
       h("span.chip-row", { style: "margin-bottom:var(--space-3)" },
@@ -568,6 +709,14 @@
       c.append(form);
     }
     if (call.duration !== undefined && call.state === "ended") c.append(h("p.muted.text-sm", { text: "Duration " + fmtClock(call.duration) }));
+    if (call.state === "ended" && call.answered_at && d.call_options) {
+      const sel = (id, opts, value) => h("select.select#" + id, h("option", { value: "", text: "Choose…" }), ...opts.map((o) => h("option", { value: o.key, selected: o.key === value ? true : null, text: o.label })));
+      c.append(h("div.wrapup", { style: "margin-top:var(--space-3)" },
+        h("div.field", h("label.field__label", { for: "wu-nature", text: "Nature of the call" }), sel("wu-nature", d.call_options.natures, call.nature)),
+        h("div.field", h("label.field__label", { for: "wu-outcome", text: "Action taken" }), sel("wu-outcome", d.call_options.outcomes, call.outcome)),
+        h("div.field", h("label.field__label", { for: "wu-text", text: "Detail (optional)" }), h("input.input#wu-text", { type: "text", maxlength: "160", value: call.action_text || "" })),
+        h("button.btn.btn--primary", { type: "button", onclick: () => { const n = $("wu-nature").value, o = $("wu-outcome").value; if (!n || !o) { toast("Choose the nature of the call and the action taken.", "error"); return; } doAct(d, "callwrap", { nature: n, outcome: o, action_text: $("wu-text").value }); } }, icon("check"), "Save for the HQ call log")));
+    }
     return c;
   }
   const call_ = call;

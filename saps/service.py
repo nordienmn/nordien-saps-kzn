@@ -10,6 +10,7 @@ Rules baked in here (so the pages cannot get them wrong):
 import base64
 import hashlib
 import hmac
+import json
 import re
 import secrets
 import time
@@ -26,6 +27,8 @@ CALL_LIMIT_S = 60       # demo rule: a live call or video lasts one minute
 RING_LIMIT_S = 90       # an unanswered call is closed after this long
 DROP_S = 20             # a live call whose caller has not been heard from for this long is treated as dropped
 MISSED_KEEP_S = 24 * 3600  # a missed call stays on every desk until it is returned, up to a day
+RING_APP_S = 45         # a call-back that rings the caller's app is given up after this long
+SAST = timezone(timedelta(hours=2))
 _SEEN = {}              # case id -> last time the caller's app checked in (memory only, one worker)
 MAX_PHOTO_BYTES = 250_000
 MAX_FACE_BYTES = 150_000
@@ -529,7 +532,7 @@ def start_call(store, payload, channel="app"):
 
     def fn(c):
         c["_ctoken"] = ctoken
-        c["call"] = {"state": "ringing", "mode": mode, "transport": "text", "room": "", "started_at": now(), "answered_at": None, "ended_at": None, "operator": "", "missed": False, "missed_reason": "", "callback": None, "app_callback": None}
+        c["call"] = {"state": "ringing", "mode": mode, "transport": "text", "room": "", "started_at": now(), "answered_at": None, "ended_at": None, "operator": "", "missed": False, "missed_reason": "", "returned": False, "callback": None, "callbacks": [], "app_callback": None, "ring": None, "nature": "", "outcome": "", "action_text": ""}
         event(c, "citizen", f"{mode.capitalize()} call started. Ringing at the control room.", "call")
 
     case = store.patch("cases", case["id"], fn)
@@ -547,6 +550,12 @@ def expire_calls(store):
         call = c.get("call")
         if not call:
             continue
+        ring = call.get("ring")
+        if ring and ring["state"] == "ringing" and t - ring["at"] > RING_APP_S:
+            def _no_answer(x):
+                x["call"]["ring"]["state"] = "no_answer"
+                event(x, "system", "The call-back was not answered. Try again, or send a message to the app.", "call")
+            store.patch("cases", c["id"], _no_answer)
         if call["state"] == "live" and call.get("answered_at") and t - call["answered_at"] > CALL_LIMIT_S:
             end_call(store, c["id"], "system", "the one-minute demo limit")
         elif call["state"] == "live" and c["id"] in _SEEN and t - _SEEN[c["id"]] > DROP_S:
@@ -577,14 +586,42 @@ def citizen_call_state(store, case_id, ctoken):
         "ended_at": call.get("ended_at"),
         "missed": bool(call.get("missed")),
         "callback_requested": bool(call.get("app_callback")),
+        "ring_state": (call.get("ring") or {}).get("state", ""),
+        "ring_mode": (call.get("ring") or {}).get("mode", "voice"),
         "limit_s": CALL_LIMIT_S,
+        "case": _citizen_case_view(store, case),
         "recording": bool(call.get("recording")),
         "lines": case["transcript"][-60:],
         "ref": case["ref"],
     }
 
 
+def _citizen_case_view(store, case):
+    """What the caller may know about their own file: who has it, where it is going, and what to do now. No other person's details."""
+    call = case.get("call") or {}
+    going = [{"kind": "station", "name": d["station_name"], "unit": d.get("unit", ""), "status": d["status"]} for d in case.get("deployments", [])]
+    for rid in case.get("referrals", []):
+        r = store.get("referrals", rid)
+        if r:
+            going.append({"kind": "partner", "name": r["partner_name"], "status": r["status"]})
+    nxt = []
+    if call.get("missed") and not call.get("returned"):
+        nxt.append("callback")
+    if case["status"] != "closed":
+        nxt += ["keep_phone", "quote_ref"]
+    if any(g["kind"] == "station" for g in going):
+        nxt.append("unit")
+    if any(g["kind"] == "partner" for g in going):
+        nxt.append("partner")
+    if case["status"] == "closed":
+        nxt.append("closed")
+    nxt.append("emergency")
+    return {"ref": case["ref"], "status": case["status"], "handler": case.get("assigned_to") or call.get("operator") or "", "going": going,
+            "cas": (case.get("external") or {}).get("cas_number", ""), "next": nxt}
+
+
 def answer_call(store, case_id, officer, transport="text", room=""):
+    sig_reset(case_id)
     def fn(c):
         call = c.get("call")
         if not call or call["state"] != "ringing":
@@ -625,6 +662,7 @@ def end_call(store, case_id, actor, who, reason=None):
             why = "The caller hung up before it was answered." if call["missed_reason"] == "caller_hung_up" else "Nobody answered in time."
             event(c, actor, f"Missed call. {why} Call back.", "call")
         _SEEN.pop(case_id, None)
+        _SIG.pop(case_id, None)
 
     case = store.patch("cases", case_id, fn)
     if case is None:
@@ -660,29 +698,107 @@ def citizen_add_line(store, case_id, ctoken, text, src="typed", partial=False):
 
 
 def callback_call(store, case_id, officer, method, note=""):
-    """Log that a missed or dropped call is being returned. By phone needs a number on record; otherwise it goes to the caller's app."""
-    method = "phone" if method == "phone" else "app"
+    """Return a missed or dropped call. phone: logged against the number on record. app: a message in the caller's app.
+    ring_voice / ring_video: ring the caller's app now, like a real call."""
+    method = method if method in ("phone", "app", "ring_voice", "ring_video") else "app"
     note = clean(note, 200)
 
     def fn(c):
         call = c.get("call")
         if not call or not call.get("missed"):
             raise Invalid("That call was not missed.")
-        if call.get("callback"):
+        if call.get("returned"):
             raise Invalid("A call-back is already logged for this call.")
+        if (call.get("ring") or {}).get("state") == "ringing":
+            raise Invalid("The caller's app is already ringing.")
         if method == "phone" and not c["mobile"]:
             raise Invalid("There is no number on record for this caller.")
-        call["callback"] = {"at": now(), "by": officer, "method": method, "note": note}
-        if method == "app":
+        entry = {"at": now(), "by": officer, "method": method, "note": note}
+        call["callback"] = entry
+        call.setdefault("callbacks", []).append(entry)
+        if method in ("ring_voice", "ring_video"):
+            mode = "video" if method == "ring_video" else "voice"
+            call["ring"] = {"state": "ringing", "at": now(), "by": officer, "mode": mode}
             call["app_callback"] = {"at": now(), "by": officer}
-        how = "by phone, on the number on record" if method == "phone" else "through the caller's app (no number on record)"
-        event(c, officer, f"Call-back logged {how}." + (" " + note if note else ""), "call")
+            event(c, officer, f"Ringing the caller's app ({mode} call). Waiting for them to answer.", "call")
+        elif method == "app":
+            call["returned"] = True
+            call["app_callback"] = {"at": now(), "by": officer}
+            event(c, officer, "Call-back message sent to the caller's app (no call possible)." + (" " + note if note else ""), "call")
+        else:
+            call["returned"] = True
+            event(c, officer, "Call-back logged by phone, on the number on record." + (" " + note if note else ""), "call")
 
     case = store.patch("cases", case_id, fn)
     if case is None:
         raise Invalid("Call not found.")
     audit(store, officer, "desk", "call.callback", case_id, method)
     return case
+
+
+def citizen_answer_ring(store, case_id, ctoken):
+    """The caller answers the control room's call-back in the app. The same file goes live again."""
+    case = store.get("cases", case_id)
+    if not _ctoken_ok(case, ctoken):
+        raise Invalid("Call not found.")
+
+    def fn(c):
+        call = c["call"]
+        ring = call.get("ring")
+        if not ring or ring["state"] != "ringing":
+            raise Invalid("Nobody is calling you now.")
+        ring["state"] = "answered"
+        call.update({"state": "live", "mode": ring["mode"], "transport": "p2p", "room": "", "answered_at": now(), "ended_at": None, "operator": ring["by"], "returned": True, "recording": False})
+        call.pop("duration", None)
+        c["assigned_to"] = ring["by"]
+        c["status"] = "in_progress"
+        event(c, "citizen", "The caller answered the call-back.", "call")
+
+    out = store.patch("cases", case_id, fn)
+    sig_reset(case_id)
+    _SEEN[case_id] = now()
+    return out
+
+
+def citizen_decline_ring(store, case_id, ctoken):
+    case = store.get("cases", case_id)
+    if not _ctoken_ok(case, ctoken):
+        raise Invalid("Call not found.")
+
+    def fn(c):
+        ring = (c.get("call") or {}).get("ring")
+        if ring and ring["state"] == "ringing":
+            ring["state"] = "declined"
+            event(c, "citizen", "The caller declined the call-back.", "call")
+
+    return store.patch("cases", case_id, fn)
+
+
+# ---- signalling for direct voice and video between the app and the desk (messages are kept in memory only)
+_SIG = {}
+SIG_MAX = 400
+
+
+def sig_reset(case_id):
+    _SIG[case_id] = {"seq": 0, "citizen": [], "desk": []}
+
+
+def sig_post(case_id, to, kind, data):
+    if to not in ("citizen", "desk") or kind not in ("offer", "answer", "ice"):
+        raise Invalid("Bad signal.")
+    if len(json.dumps(data)) > 20000:
+        raise Invalid("Signal too large.")
+    box = _SIG.setdefault(case_id, {"seq": 0, "citizen": [], "desk": []})
+    if len(box[to]) >= SIG_MAX:
+        raise Invalid("Too many signals.")
+    box["seq"] += 1
+    box[to].append({"n": box["seq"], "type": kind, "data": data})
+    return box["seq"]
+
+
+def sig_get(case_id, side, after):
+    box = _SIG.get(case_id)
+    return [m for m in box[side] if m["n"] > after] if box else []
 
 
 def citizen_end_call(store, case_id, ctoken):
@@ -736,6 +852,15 @@ def act(store, case_id, officer, payload):
             if payload.get("age_band") in taxonomy.AGE_BANDS:
                 c["age_band"] = payload["age_band"]
             event(c, officer, "Recorded gender and age group (grouped statistics only).", "action")
+        elif action == "callwrap":
+            if not c.get("call"):
+                raise Invalid("That file has no call.")
+            nature, outcome = clean(payload.get("nature"), 30), clean(payload.get("outcome"), 20)
+            if nature not in call_natures() or outcome not in CALL_OUTCOMES:
+                raise Invalid("Choose the nature of the call and the action taken.")
+            c["call"]["nature"], c["call"]["outcome"] = nature, outcome
+            c["call"]["action_text"] = clean(payload.get("action_text"), 160)
+            event(c, officer, f"Call wrap-up: {call_natures()[nature]}. {CALL_OUTCOMES[outcome]}." + (" " + c["call"]["action_text"] if c["call"]["action_text"] else ""), "action")
         elif action == "reopen":
             c["status"] = "in_progress"
             c["closed_at"] = None
@@ -998,6 +1123,28 @@ def sla_level(case):
     return "green" if age < green else "amber" if age < amber else "red"
 
 
+def _caller_profile(case, role):
+    """What the desk sees about a caller who is registered in the app. Never sent to HQ."""
+    call = case.get("call") or {}
+    active = call.get("state") in ("ringing", "live") or (call.get("missed") and not call.get("returned"))
+    if role != "desk" or case["kind"] != "call" or not active:
+        return None
+    return {"registered": bool(case.get("registered")), "name": case["name"], "mobile": case["mobile"], "gender": case["gender"], "age_band": case["age_band"],
+            "home_address": case.get("home_address", ""), "has_photo": any(m["type"] == "face" for m in case["media"])}
+
+
+def face_image(store, case_id):
+    """The profile photo a registered caller sent with the call, as (mime, bytes), or None."""
+    m = store.get("media", f"{case_id}-face")
+    if not m or not m.get("data_url", "").startswith("data:"):
+        return None
+    head, _, body = m["data_url"].partition(",")
+    try:
+        return head[5:].split(";")[0] or "image/jpeg", base64.b64decode(body)
+    except Exception:
+        return None
+
+
 def _summary(case, role, lang="en"):
     """A list row. Names and numbers appear only for the desk, and never for restricted kinds."""
     show_person = role == "desk" and not case["restricted"]
@@ -1017,7 +1164,9 @@ def _summary(case, role, lang="en"):
         "call_state": call.get("state", ""), "call_mode": call.get("mode", ""),
         "call_answered_at": call.get("answered_at"), "call_ended_at": call.get("ended_at"), "call_operator": call.get("operator", ""),
         "call_missed": bool(call.get("missed")), "call_missed_reason": call.get("missed_reason", ""),
-        "call_callback": bool(call.get("callback")),
+        "call_callback": bool(call.get("returned")), "call_ring": (call.get("ring") or {}).get("state", ""),
+        "call_transport": call.get("transport", ""),
+        "caller": _caller_profile(case, role) if call else None,
         "referrals": len(case["referrals"]),
         "incomplete": case.get("incomplete", False), "missing": case.get("missing", []),
         "deployed": sum(1 for d in case.get("deployments", []) if d["status"] != "cleared"),
@@ -1061,7 +1210,7 @@ def call_window(case):
         return False
     if call["state"] in ("ringing", "live"):
         return True
-    return bool(call.get("missed")) and not call.get("callback") and now() - (call.get("ended_at") or 0) < MISSED_KEEP_S
+    return bool(call.get("missed")) and not call.get("returned") and now() - (call.get("ended_at") or 0) < MISSED_KEEP_S
 
 
 def section_allows_case(section, case, officer=None):
@@ -1132,6 +1281,7 @@ def case_detail(store, case_id, officer, role="desk"):
         "contact_pref": case.get("contact_pref"), "friend": case.get("friend"),
         "gender": case.get("gender", "undisclosed"), "age_band": case.get("age_band", "undisclosed"), "language": case.get("language", "en"),
         "registered": case.get("registered", False), "home_address": case.get("home_address", ""), "friend_name": case.get("friend_name", ""),
+        "call_options": ({"natures": [{"key": k, "label": v} for k, v in call_natures().items()], "outcomes": [{"key": k, "label": v} for k, v in CALL_OUTCOMES.items()]} if case.get("call") else None),
         "needs": case.get("needs", []), "needs_labels": {k: taxonomy.GBV_NEEDS[k] for k in taxonomy.GBV_NEEDS},
         "deployments": case.get("deployments", []),
         "suggested_station": geo.nearest_station(case["lat"], case["lon"]) if case["lat"] is not None else None,
@@ -1168,7 +1318,7 @@ def attention(store, cases, tips, refs):
         if c["status"] == "closed":
             continue
         call = c.get("call") or {}
-        if call.get("missed") and not call.get("callback") and t - (call.get("ended_at") or t) > 300:
+        if call.get("missed") and not call.get("returned") and t - (call.get("ended_at") or t) > 300:
             items.append({"type": "missed_call", "severity": 2, "id": c["id"], "ref": c["ref"], "kind": c["kind"], "label": case_label(c),
                           "cluster_name": geo.name(c["cluster"]), "since": call["ended_at"], "reason": "Missed call not returned for over 5 minutes."})
         if call.get("state") == "ringing" and t - call["started_at"] > 30:
@@ -1583,3 +1733,90 @@ def unit_need_answer(store, ap_id, task_id, need, answer, note, actor):
     store.patch("cases", owner["id"], fn)
     audit(store, ap["name"], "unit", "gbv.need." + answer, owner["id"], need)
     return True
+
+
+# ----------------------------------------------------------------------------- the end-of-day call log (HQ)
+CALL_OUTCOMES = {
+    "advice": "Advice given", "dispatched": "Station or unit dispatched", "referred": "Referred out of SAPS",
+    "report": "Opened a file for follow-up", "no_action": "No action needed", "hoax": "Hoax or test call",
+}
+
+
+def call_natures():
+    out = {k: v[0] for k, v in taxonomy.CRIME_TYPES.items() if not v[3]}
+    out.update({"enquiry": "Enquiry or advice", "hoax": "Hoax or test call", "other": "Other"})
+    return out
+
+
+def _day_range(day):
+    """Local (SAST) day boundaries for the log."""
+    t = datetime.fromtimestamp(now(), SAST)
+    start = t.replace(hour=0, minute=0, second=0, microsecond=0)
+    if day == "yesterday":
+        return (start - timedelta(days=1)).timestamp(), start.timestamp(), "Yesterday"
+    if day == "7d":
+        return (start - timedelta(days=6)).timestamp(), (start + timedelta(days=1)).timestamp(), "Last 7 days"
+    return start.timestamp(), (start + timedelta(days=1)).timestamp(), "Today"
+
+
+def call_log(store, day="today", q=""):
+    """Every call in the period: file number, time, duration, operator, nature, action taken. No names or numbers."""
+    expire_calls(store)
+    lo, hi, label = _day_range(day)
+    natures = call_natures()
+    rows = []
+    for c in store.all("cases"):
+        call = c.get("call")
+        if not call or not (lo <= call["started_at"] < hi):
+            continue
+        answered = bool(call.get("answered_at"))
+        parts = []
+        if call.get("outcome"):
+            parts.append(CALL_OUTCOMES[call["outcome"]])
+        stations = sorted({d["station_name"] for d in c.get("deployments", [])})
+        if stations:
+            parts.append("Unit from " + ", ".join(stations))
+        for rid in c.get("referrals", []):
+            r = store.get("referrals", rid)
+            if r:
+                parts.append("Referred to " + r["partner_name"])
+        if call.get("action_text"):
+            parts.append(call["action_text"])
+        if call.get("missed"):
+            cb = call.get("callback")
+            parts.append(("Call-back " + {"phone": "by phone", "app": "message sent to the app", "ring_voice": "rang the app", "ring_video": "rang the app (video)"}.get(cb["method"], "") + " by " + cb["by"]) if cb else "Not yet returned")
+        result = ("Dropped" if call.get("missed_reason") == "dropped" else "Answered") if answered else "Missed"
+        rows.append({
+            "id": c["id"], "ref": c["ref"], "started_at": call["started_at"], "answered_at": call.get("answered_at"),
+            "duration": call.get("duration") if answered else None, "operator": call.get("operator") or "",
+            "nature": natures.get(call.get("nature"), "") , "action": "; ".join(parts), "result": result, "mode": call.get("mode", "voice"),
+            "returned": bool(call.get("returned")), "cluster_name": geo.name(c["cluster"]),
+            "wrap_missing": answered and not call.get("nature"),
+        })
+    q = clean(q, 60).lower()
+    if q:
+        rows = [r for r in rows if q in " ".join(str(r[k]) for k in ("ref", "operator", "nature", "action", "result", "cluster_name")).lower()]
+    rows.sort(key=lambda r: -r["started_at"])
+    answered = [r for r in rows if r["result"] != "Missed"]
+    durs = [r["duration"] for r in answered if r["duration"]]
+    in30 = [r for r in answered if r["answered_at"] and r["answered_at"] - r["started_at"] <= 30]
+    summary = {
+        "calls": len(rows), "answered": len(answered), "missed": sum(1 for r in rows if r["result"] == "Missed"), "dropped": sum(1 for r in rows if r["result"] == "Dropped"),
+        "not_returned": sum(1 for r in rows if r["result"] != "Answered" and not r["returned"]),
+        "avg_duration": round(sum(durs) / len(durs)) if durs else 0,
+        "answered_30s_pct": round(100 * len(in30) / len(rows)) if rows else 0, "wrap_missing": sum(1 for r in rows if r["wrap_missing"]),
+    }
+    return {"day": day, "label": label, "from": lo, "to": hi, "summary": summary, "rows": rows}
+
+
+def call_log_csv(log):
+    import csv
+    import io
+
+    f = lambda ts: datetime.fromtimestamp(ts, SAST).strftime("%Y-%m-%d %H:%M:%S") if ts else ""  # noqa: E731
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["File / case number", "Date and time", "Duration (seconds)", "Desk operator", "Nature of call", "Action taken", "Result", "Area"])
+    for r in log["rows"]:
+        w.writerow([r["ref"], f(r["started_at"]), r["duration"] if r["duration"] is not None else "", r["operator"], r["nature"] or "Not recorded", r["action"] or "None recorded", r["result"], r["cluster_name"]])
+    return out.getvalue()

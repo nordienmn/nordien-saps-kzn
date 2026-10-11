@@ -21,7 +21,38 @@
   .answers li { display: flex; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border); font-size: var(--fs-sm); }
   .answers li span:first-child { color: var(--color-text-muted); }
   .answers li span:last-child { font-weight: var(--fw-semibold); text-align: right; }
-  .incoming-wrap { display: grid; gap: var(--space-3); }
+  .incoming-wrap { display: grid; gap: var(--space-2); }
+  .calls-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding: var(--space-2) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+  .calls-bar--ring { border-color: var(--color-emergency); }
+  .calls-bar__title { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-display); font-weight: var(--fw-bold); font-size: var(--fs-lg); letter-spacing: 0.04em; text-transform: uppercase; }
+  .calls-bar__line { color: var(--color-text-muted); font-size: var(--fs-sm); flex: 1 1 12rem; }
+  .calls-bar__pills { display: inline-flex; gap: var(--space-2); }
+  .call-stage { display: grid; gap: var(--space-3); padding: var(--space-4); border: 2px solid var(--color-answer); border-radius: var(--radius-lg); background: var(--color-surface); }
+  .call-stage[hidden] { display: none; }
+  .call-stage__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+  .call-stage__live { font-family: var(--font-display); font-weight: var(--fw-bold); font-size: var(--fs-lg); letter-spacing: 0.04em; text-transform: uppercase; flex: 1 1 auto; }
+  .call-stage__timer { font-family: var(--font-display); font-size: var(--fs-2xl); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
+  .call-stage__remote { position: relative; display: grid; place-items: center; min-height: 6rem; max-height: 22rem; border-radius: var(--radius-md); background: #07101f; overflow: hidden; }
+  .call-stage__remote video { width: 100%; max-height: 22rem; object-fit: contain; background: #000; }
+  .call-stage__wait { color: #b9c6dc; font-size: var(--fs-sm); padding: var(--space-4); }
+  .call-stage__self { position: absolute; right: 1rem; bottom: 6.5rem; width: 7rem; border-radius: var(--radius-sm); overflow: hidden; border: 2px solid var(--color-surface); box-shadow: var(--shadow-2); }
+  .call-stage__self video { width: 100%; display: block; }
+  .call-stage__controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .caller-block { display: flex; gap: var(--space-3); align-items: center; }
+  .caller-block__photo { width: 3.5rem; height: 3.5rem; border-radius: 50%; object-fit: cover; flex: none; background: var(--color-border); display: grid; place-items: center; }
+  .caller-block__name { font-weight: var(--fw-bold); font-size: var(--fs-lg); line-height: 1.15; }
+  .caller-block__meta { color: var(--color-text-muted); font-size: var(--fs-sm); }
+  .wrapup { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: end; }
+  .call-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-4); border: 1px solid var(--color-border); border-left-width: 4px; border-radius: var(--radius-md); background: var(--color-surface); }
+  .call-row--live { border-left-color: var(--color-answer); }
+  .call-row--missed { border-left-color: var(--status-warning-fg); grid-template-columns: auto minmax(0, 1fr) auto; }
+  .call-row__icon { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--color-surface-2, var(--color-border)); }
+  .call-row--live .call-row__icon { background: var(--color-answer); color: var(--color-on-answer); }
+  .call-row__title { font-weight: var(--fw-semibold); }
+  .call-row__meta { color: var(--color-text-muted); font-size: var(--fs-sm); }
+  .call-row__timer { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
+  .call-row__actions { display: inline-flex; gap: var(--space-2); flex-wrap: wrap; }
+  @media (max-width: 1180px) { .call-row, .call-row--missed { grid-template-columns: auto minmax(0, 1fr); } .call-row__actions { grid-column: 1 / -1; } }
   .incoming-wrap .call-controls--inline .call-btn { color: var(--color-text); }
   .queue-empty { padding: var(--space-6) var(--space-4); }
   @media (max-width: 1180px) {

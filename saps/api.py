@@ -44,6 +44,7 @@ def citizen_config():
     return jsonify({
         "demo": True,
         "video": Config.video_enabled(),
+        "ice": telephony.ice_servers(),
         "whatsapp": {"enabled": Config.whatsapp_enabled(), "display": Config.WHATSAPP_DISPLAY, "join_hint": Config.WHATSAPP_JOIN_HINT},
         "crime_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.CRIME_TYPES.items() if not v[3]],
         "tip_types": [{"key": k, "en": v[0], "zu": v[1]} for k, v in taxonomy.TIP_TYPES.items()],
@@ -102,6 +103,36 @@ def call_start():
 @bp.get("/c/call/<cid>/state")
 def call_state(cid):
     return jsonify(service.citizen_call_state(store(), cid, request.args.get("t", "")))
+
+
+@bp.post("/c/call/<cid>/ring/answer")
+def call_ring_answer(cid):
+    service.citizen_answer_ring(store(), cid, body().get("t"))
+    return jsonify({"ok": True})
+
+
+@bp.post("/c/call/<cid>/ring/decline")
+def call_ring_decline(cid):
+    service.citizen_decline_ring(store(), cid, body().get("t"))
+    return jsonify({"ok": True})
+
+
+@bp.post("/c/call/<cid>/signal")
+def call_signal_post(cid):
+    data = body()
+    case = store().get("cases", cid)
+    if not service._ctoken_ok(case, data.get("t")):
+        return jsonify({"error": "Call not found."}), 404
+    service.sig_post(cid, "desk", data.get("type"), data.get("data"))
+    return jsonify({"ok": True})
+
+
+@bp.get("/c/call/<cid>/signal")
+def call_signal_get(cid):
+    case = store().get("cases", cid)
+    if not service._ctoken_ok(case, request.args.get("t", "")):
+        return jsonify({"error": "Call not found."}), 404
+    return jsonify({"messages": service.sig_get(cid, "citizen", request.args.get("after", 0, type=int))})
 
 
 @bp.post("/c/call/<cid>/line")
@@ -301,6 +332,7 @@ def me():
         "role": role, "officer": officer, "section": security.section(), "require_photo": Config.REQUIRE_SIGNIN_PHOTO,
         "sections": service.section_options(),
         "video": Config.video_enabled(), "whatsapp": Config.whatsapp_enabled(),
+        "ice": telephony.ice_servers() if role == "desk" else [],
         "login_desk": bool(Config.DESK_PASSWORD), "login_board": bool(Config.BOARD_PASSWORD),
     })
 
@@ -408,7 +440,7 @@ def staff_answer(cid):
     want_video = bool(data.get("video")) and Config.video_enabled()
     case = store().get("cases", cid)
     room = ""
-    transport = "text"
+    transport = "p2p"  # a direct voice or video call between the app and this desk
     if want_video and case and case.get("call") and case["call"]["mode"] in ("voice", "video"):
         room = telephony.room_name(cid)
         if telephony.ensure_room(room):
@@ -420,6 +452,47 @@ def staff_answer(cid):
     if transport == "video":
         out["token"] = telephony.video_token(f"desk-{officer}", room)
     return jsonify(out)
+
+
+@bp.get("/staff/case/<cid>/face")
+@security.login_required("desk")
+def staff_face(cid):
+    if (g := _case_gate(cid)):
+        return g
+    found = service.face_image(store(), cid)
+    if found is None:
+        return jsonify({"error": "No photo."}), 404
+    resp = send_file(io.BytesIO(found[1]), mimetype=found[0], max_age=0)
+    resp.headers["Cache-Control"] = "private, max-age=120"
+    return resp
+
+
+@bp.post("/staff/case/<cid>/signal")
+@security.login_required("desk")
+def staff_signal_post(cid):
+    if (g := _case_gate(cid)):
+        return g
+    data = body()
+    service.sig_post(cid, "citizen", data.get("type"), data.get("data"))
+    return jsonify({"ok": True})
+
+
+@bp.get("/staff/case/<cid>/signal")
+@security.login_required("desk")
+def staff_signal_get(cid):
+    if (g := _case_gate(cid)):
+        return g
+    return jsonify({"messages": service.sig_get(cid, "desk", request.args.get("after", 0, type=int))})
+
+
+@bp.get("/staff/call-log")
+@security.login_required("board")
+def staff_call_log():
+    a = request.args
+    log = service.call_log(store(), a.get("day", "today"), a.get("q", ""))
+    if a.get("format") == "csv":
+        return Response(service.call_log_csv(log), mimetype="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="call-log-{log["day"]}.csv"'})
+    return jsonify(log)
 
 
 @bp.post("/staff/case/<cid>/callback")

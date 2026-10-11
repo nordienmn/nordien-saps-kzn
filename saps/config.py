@@ -47,6 +47,7 @@ class Config:
     REQUIRE_SIGNIN_PHOTO = env("REQUIRE_SIGNIN_PHOTO", "1") == "1"
 
     # Twilio. Everything here is optional; features switch off cleanly without it.
+    ICE_SERVERS = env("ICE_SERVERS")  # optional JSON list of WebRTC servers (STUN/TURN) for calls between the app and the desk
     TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID")
     TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN")
     TWILIO_WHATSAPP_FROM = env("TWILIO_WHATSAPP_FROM")  # e.g. whatsapp:+14155238886 (sandbox)
