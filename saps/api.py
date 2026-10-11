@@ -311,13 +311,13 @@ def _deny(msg="That file belongs to another section."):
 
 def _case_gate(cid):
     """Desk officers may only open and change files that belong to their section. HQ is not limited."""
-    role, _ = security.current()
+    role, officer = security.current()
     if role != "desk":
         return None
     case = store().get("cases", cid)
     if case is None:
         return jsonify({"error": "Not found."}), 404
-    return None if service.section_allows_case(security.section(), case) else _deny()
+    return None if service.section_allows_case(security.section(), case, officer) else _deny()
 
 
 def _tip_gate():
@@ -336,7 +336,7 @@ def staff_feed():
     since = request.args.get("since", type=int)
     if since is not None and since == s.snapshot_version():
         return jsonify({"unchanged": True, "version": since, "now": service.now()})
-    return jsonify(service.feed(s, role, security.section()))
+    return jsonify(service.feed(s, role, security.section(), security.current()[1]))
 
 
 @bp.get("/staff/case/<cid>")
@@ -420,6 +420,17 @@ def staff_answer(cid):
     if transport == "video":
         out["token"] = telephony.video_token(f"desk-{officer}", room)
     return jsonify(out)
+
+
+@bp.post("/staff/case/<cid>/callback")
+@security.login_required("desk")
+def staff_callback(cid):
+    if (g := _case_gate(cid)):
+        return g
+    _, officer = security.current()
+    data = body()
+    service.callback_call(store(), cid, officer, data.get("method"), data.get("note"))
+    return jsonify({"ok": True})
 
 
 @bp.post("/staff/case/<cid>/end")

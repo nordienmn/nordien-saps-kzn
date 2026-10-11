@@ -713,3 +713,76 @@ def test_home_screen_icons_and_weather_cover(client):
         assert client.get(path).status_code == 200
     names = client.get("/static/manifest-weather.json").get_json()
     assert names["name"] == "Weather" and names["start_url"] == "/weather"
+
+
+# ---------------------------------------------------------------- calling is shared, missed and dropped calls
+def test_every_section_sees_a_ringing_call_and_can_answer_it(client):
+    cid = client.post("/api/c/call/start", json={"mode": "voice"}).json["id"]
+    for section in ("desk", "tip_line", "gbv", "call_centre"):
+        login(client, section=section)
+        feed = client.get("/api/staff/feed").json
+        assert any(c["id"] == cid and c["call_state"] == "ringing" for c in feed["cases"]), section
+    login(client, section="gbv")
+    assert client.post(f"/api/staff/case/{cid}/answer", json={}).status_code == 200
+    assert client.get(f"/api/staff/case/{cid}").status_code == 200
+    # an ordinary crime file is still closed to the GBV section
+    login(client, section="desk")
+    crime = client.post("/api/c/report", json={"kind": "crime", "type": "theft"}).json["id"]
+    login(client, section="gbv")
+    assert client.get(f"/api/staff/case/{crime}").status_code == 403
+
+
+def test_unanswered_call_becomes_a_missed_call_on_every_desk_until_returned(client):
+    import time
+
+    start = client.post("/api/c/call/start", json={"mode": "voice", "name": "Thandi", "mobile": "0821234567"}).json
+    cid = start["id"]
+    client.store.patch("cases", cid, lambda c: c["call"].update(started_at=time.time() - 120))
+    login(client, section="tip_line")
+    row = next(c for c in client.get("/api/staff/feed").json["cases"] if c["id"] == cid)
+    assert row["call_missed"] and row["call_missed_reason"] == "unanswered" and not row["call_callback"]
+    # return it by phone, from a section that is not the call centre
+    assert client.post(f"/api/staff/case/{cid}/callback", json={"method": "phone", "note": "Rang back"}).status_code == 200
+    assert client.post(f"/api/staff/case/{cid}/callback", json={"method": "phone"}).status_code == 422
+    login(client, section="gbv")
+    assert not any(c["id"] == cid for c in client.get("/api/staff/feed").json["cases"])
+
+
+def test_missed_call_without_a_number_goes_back_to_the_app(client):
+    start = client.post("/api/c/call/start", json={"mode": "voice"}).json
+    cid, t = start["id"], start["ctoken"]
+    client.post(f"/api/c/call/{cid}/end", json={"t": t})  # the caller hangs up before anyone answers
+    login(client, section="desk")
+    row = next(c for c in client.get("/api/staff/feed").json["cases"] if c["id"] == cid)
+    assert row["call_missed"] and row["call_missed_reason"] == "caller_hung_up"
+    assert client.post(f"/api/staff/case/{cid}/callback", json={"method": "phone"}).status_code == 422  # no number on record
+    assert client.post(f"/api/staff/case/{cid}/callback", json={"method": "app"}).status_code == 200
+    state = client.get(f"/api/c/call/{cid}/state?t={t}").json
+    assert state["missed"] and state["callback_requested"]
+
+
+def test_dropped_live_call_is_flagged_for_call_back(client):
+    import time
+    from saps import service
+
+    start = client.post("/api/c/call/start", json={"mode": "voice"}).json
+    cid, t = start["id"], start["ctoken"]
+    login(client, section="call_centre")
+    client.post(f"/api/staff/case/{cid}/answer", json={})
+    assert client.get(f"/api/c/call/{cid}/state?t={t}").json["state"] == "live"  # the caller's app checks in
+    service._SEEN[cid] = time.time() - 40  # then goes quiet
+    state = client.get(f"/api/c/call/{cid}/state?t={t}").json
+    assert state["state"] == "ended" and state["missed"]
+    assert client.store.get("cases", cid)["call"]["missed_reason"] == "dropped"
+
+
+def test_board_is_alerted_to_a_missed_call_not_returned(client):
+    import time
+
+    cid = client.post("/api/c/call/start", json={"mode": "voice"}).json["id"]
+    client.store.patch("cases", cid, lambda c: c["call"].update(started_at=time.time() - 900))
+    login(client, "board")
+    client.get("/api/staff/feed")  # the unanswered call closes itself and becomes a missed call
+    client.store.patch("cases", cid, lambda c: c["call"].update(ended_at=time.time() - 400))
+    feed = client.get("/api/staff/feed").json
+    assert any(a["type"] == "missed_call" and a["id"] == cid for a in feed["attention"])

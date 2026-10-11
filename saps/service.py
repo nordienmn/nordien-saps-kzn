@@ -24,6 +24,9 @@ MAX_NOTE = 2000
 MAX_TRANSCRIPT_LINES = 300
 CALL_LIMIT_S = 60       # demo rule: a live call or video lasts one minute
 RING_LIMIT_S = 90       # an unanswered call is closed after this long
+DROP_S = 20             # a live call whose caller has not been heard from for this long is treated as dropped
+MISSED_KEEP_S = 24 * 3600  # a missed call stays on every desk until it is returned, up to a day
+_SEEN = {}              # case id -> last time the caller's app checked in (memory only, one worker)
 MAX_PHOTO_BYTES = 250_000
 MAX_FACE_BYTES = 150_000
 MAX_PHOTOS = 3
@@ -526,7 +529,7 @@ def start_call(store, payload, channel="app"):
 
     def fn(c):
         c["_ctoken"] = ctoken
-        c["call"] = {"state": "ringing", "mode": mode, "transport": "text", "room": "", "started_at": now(), "answered_at": None, "ended_at": None, "operator": ""}
+        c["call"] = {"state": "ringing", "mode": mode, "transport": "text", "room": "", "started_at": now(), "answered_at": None, "ended_at": None, "operator": "", "missed": False, "missed_reason": "", "callback": None, "app_callback": None}
         event(c, "citizen", f"{mode.capitalize()} call started. Ringing at the control room.", "call")
 
     case = store.patch("cases", case["id"], fn)
@@ -546,8 +549,10 @@ def expire_calls(store):
             continue
         if call["state"] == "live" and call.get("answered_at") and t - call["answered_at"] > CALL_LIMIT_S:
             end_call(store, c["id"], "system", "the one-minute demo limit")
+        elif call["state"] == "live" and c["id"] in _SEEN and t - _SEEN[c["id"]] > DROP_S:
+            end_call(store, c["id"], "system", "the line (the caller disconnected)", reason="dropped")
         elif call["state"] == "ringing" and t - call["started_at"] > RING_LIMIT_S:
-            end_call(store, c["id"], "system", "the system (nobody answered)")
+            end_call(store, c["id"], "system", "the system (nobody answered)", reason="unanswered")
 
 
 def citizen_call_state(store, case_id, ctoken):
@@ -556,6 +561,8 @@ def citizen_call_state(store, case_id, ctoken):
     if not _ctoken_ok(case, ctoken) or not case.get("call"):
         raise Invalid("Call not found.")
     call = case["call"]
+    if call["state"] != "ended":
+        _SEEN[case_id] = now()
     ahead = 0
     if call["state"] == "ringing":
         ahead = sum(1 for c in store.all("cases") if c.get("call") and c["call"]["state"] == "ringing" and c["call"]["started_at"] < call["started_at"])
@@ -568,6 +575,8 @@ def citizen_call_state(store, case_id, ctoken):
         "queue_ahead": ahead,
         "answered_at": call.get("answered_at"),
         "ended_at": call.get("ended_at"),
+        "missed": bool(call.get("missed")),
+        "callback_requested": bool(call.get("app_callback")),
         "limit_s": CALL_LIMIT_S,
         "recording": bool(call.get("recording")),
         "lines": case["transcript"][-60:],
@@ -593,7 +602,7 @@ def answer_call(store, case_id, officer, transport="text", room=""):
     return case
 
 
-def end_call(store, case_id, actor, who):
+def end_call(store, case_id, actor, who, reason=None):
     def fn(c):
         call = c.get("call")
         if not call or call["state"] == "ended":
@@ -603,11 +612,19 @@ def end_call(store, case_id, actor, who):
         call["ended_at"] = now()
         secs = int(call["ended_at"] - call["answered_at"]) if answered and call.get("answered_at") else 0
         call["duration"] = secs
-        if answered:
+        if answered and reason == "dropped":
+            call["missed"] = True
+            call["missed_reason"] = "dropped"
+            event(c, actor, f"Call dropped: {who}. Duration {secs // 60}:{secs % 60:02d}. Call back.", "call")
+        elif answered:
             event(c, actor, f"Call ended by {who}. Duration {secs // 60}:{secs % 60:02d}.", "call")
         else:
             c["status"] = "new"
-            event(c, actor, f"Call ended by {who} before it was answered. Call back.", "call")
+            call["missed"] = True
+            call["missed_reason"] = reason or "unanswered"
+            why = "The caller hung up before it was answered." if call["missed_reason"] == "caller_hung_up" else "Nobody answered in time."
+            event(c, actor, f"Missed call. {why} Call back.", "call")
+        _SEEN.pop(case_id, None)
 
     case = store.patch("cases", case_id, fn)
     if case is None:
@@ -642,11 +659,37 @@ def citizen_add_line(store, case_id, ctoken, text, src="typed", partial=False):
     return add_line(store, case_id, "citizen", text, "caption" if src == "caption" else "typed", partial)
 
 
+def callback_call(store, case_id, officer, method, note=""):
+    """Log that a missed or dropped call is being returned. By phone needs a number on record; otherwise it goes to the caller's app."""
+    method = "phone" if method == "phone" else "app"
+    note = clean(note, 200)
+
+    def fn(c):
+        call = c.get("call")
+        if not call or not call.get("missed"):
+            raise Invalid("That call was not missed.")
+        if call.get("callback"):
+            raise Invalid("A call-back is already logged for this call.")
+        if method == "phone" and not c["mobile"]:
+            raise Invalid("There is no number on record for this caller.")
+        call["callback"] = {"at": now(), "by": officer, "method": method, "note": note}
+        if method == "app":
+            call["app_callback"] = {"at": now(), "by": officer}
+        how = "by phone, on the number on record" if method == "phone" else "through the caller's app (no number on record)"
+        event(c, officer, f"Call-back logged {how}." + (" " + note if note else ""), "call")
+
+    case = store.patch("cases", case_id, fn)
+    if case is None:
+        raise Invalid("Call not found.")
+    audit(store, officer, "desk", "call.callback", case_id, method)
+    return case
+
+
 def citizen_end_call(store, case_id, ctoken):
     case = store.get("cases", case_id)
     if not _ctoken_ok(case, ctoken):
         raise Invalid("Call not found.")
-    return end_call(store, case_id, "citizen", "the caller")
+    return end_call(store, case_id, "citizen", "the caller", reason="caller_hung_up")
 
 
 # ----------------------------------------------------------------------------- case actions
@@ -972,6 +1015,9 @@ def _summary(case, role, lang="en"):
         "assigned_to": case["assigned_to"],
         "created_at": case["created_at"], "updated_at": case["updated_at"],
         "call_state": call.get("state", ""), "call_mode": call.get("mode", ""),
+        "call_answered_at": call.get("answered_at"), "call_ended_at": call.get("ended_at"), "call_operator": call.get("operator", ""),
+        "call_missed": bool(call.get("missed")), "call_missed_reason": call.get("missed_reason", ""),
+        "call_callback": bool(call.get("callback")),
         "referrals": len(case["referrals"]),
         "incomplete": case.get("incomplete", False), "missing": case.get("missing", []),
         "deployed": sum(1 for d in case.get("deployments", []) if d["status"] != "cleared"),
@@ -1008,21 +1054,40 @@ def section_options():
     return [{"key": k, "label": v["label"]} for k, v in SECTIONS.items()]
 
 
-def section_allows_case(section, case):
-    return section in SECTIONS and case["kind"] in SECTIONS[section]["kinds"]
+def call_window(case):
+    """A call that every desk section must be able to see: ringing, live, or missed and not yet returned."""
+    call = case.get("call")
+    if not call:
+        return False
+    if call["state"] in ("ringing", "live"):
+        return True
+    return bool(call.get("missed")) and not call.get("callback") and now() - (call.get("ended_at") or 0) < MISSED_KEEP_S
+
+
+def section_allows_case(section, case, officer=None):
+    if section not in SECTIONS:
+        return False
+    if case["kind"] in SECTIONS[section]["kinds"]:
+        return True
+    call = case.get("call")
+    if call and case["kind"] == "call":  # calling is shared by every section so that anyone free can answer
+        if call_window(case):
+            return True
+        return bool(officer) and officer in (call.get("operator"), (call.get("callback") or {}).get("by"))
+    return False
 
 
 def section_allows_tips(section):
     return section in SECTIONS and SECTIONS[section]["tips"]
 
 
-def feed(store, role, section=None):
+def feed(store, role, section=None, officer=None):
     expire_calls(store)
     cases = sorted(store.all("cases"), key=lambda c: -c["created_at"])
     tips = sorted(store.all("tips"), key=lambda t: -t["created_at"])
     refs = store.all("referrals")
     if role == "desk":
-        cases = [c for c in cases if section_allows_case(section, c)]
+        cases = [c for c in cases if section_allows_case(section, c, officer)]
         tips = tips if section_allows_tips(section) else []
         ids = {c["id"] for c in cases} | {t["id"] for t in tips}
         refs = [r for r in refs if r["case_id"] in ids]
@@ -1103,6 +1168,9 @@ def attention(store, cases, tips, refs):
         if c["status"] == "closed":
             continue
         call = c.get("call") or {}
+        if call.get("missed") and not call.get("callback") and t - (call.get("ended_at") or t) > 300:
+            items.append({"type": "missed_call", "severity": 2, "id": c["id"], "ref": c["ref"], "kind": c["kind"], "label": case_label(c),
+                          "cluster_name": geo.name(c["cluster"]), "since": call["ended_at"], "reason": "Missed call not returned for over 5 minutes."})
         if call.get("state") == "ringing" and t - call["started_at"] > 30:
             items.append({"type": "unanswered_call", "severity": 1, "id": c["id"], "ref": c["ref"], "kind": c["kind"], "label": case_label(c),
                           "cluster_name": geo.name(c["cluster"]), "since": call["started_at"], "reason": "Call ringing for over 30 seconds."})
