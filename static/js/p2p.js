@@ -9,6 +9,7 @@
     const remote = new MediaStream();
     let after = 0, closed = false, remoteSet = false, queued = [], timer = null, busy = false, started = Date.now();
     const offerer = o.role === "offerer";
+    (window.SAPS_P2P_DEBUG = window.SAPS_P2P_DEBUG || []).push(pc);
 
     pc.ontrack = (e) => {
       (e.streams && e.streams[0] ? e.streams[0].getTracks() : [e.track]).forEach((t) => { if (!remote.getTracks().includes(t)) remote.addTrack(t); });
