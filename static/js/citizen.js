@@ -590,17 +590,28 @@
   // ---- direct voice and video between this phone and the control-room desk
   let p2p = null;
   function resetCallHeading(key) { const hd = $(".call__who"); if (hd) { hd.dataset.i18n = key; hd.textContent = t(key); } }
+  const diag = (msg) => { if (call && call.id) api(`/api/c/call/${call.id}/diag`, { body: { t: call.ctoken, msg } }).catch(() => {}); };
+  function setLink(text, bad) { const n = $("#call-note"); if (!n) return; n.hidden = !text; n.textContent = text || ""; n.dataset.bad = bad ? "1" : ""; }
   async function joinP2P() {
     if (p2p || !call) return;
-    const id = call.id, tok = call.ctoken, video = call.mode === "video";
-    const stream = await (call.streamP || Promise.resolve(null));
+    const id = call.id, video = call.mode === "video";
+    setLink(t("linkConn"));
+    const stream = await Promise.race([call.streamP || Promise.resolve(null), new Promise((r) => setTimeout(() => r(null), 7000))]);
     if (!call || call.id !== id || p2p) return;
     call.transport = "p2p"; paintCall();
+    if (!stream) diag("Phone: microphone or camera not available, receiving only");
+    let reported = false;
     p2p = window.SAPS_P2P.connect({
       role: "offerer", ice: (config && config.ice) || [], stream, wantVideo: video,
-      post: (type, data) => api(`/api/c/call/${id}/signal`, { body: { t: tok, type, data } }),
-      fetchSince: async (after) => (await api(`/api/c/call/${id}/signal?t=${encodeURIComponent(tok)}&after=${after}`)).messages,
+      post: (type, data) => api(`/api/c/call/${id}/signal`, { body: { t: call.ctoken, type, data } }),
+      fetchSince: async (after) => (await api(`/api/c/call/${id}/signal?t=${encodeURIComponent(call.ctoken)}&after=${after}`)).messages,
       onTrack: attachRemote,
+      onState: async (st) => {
+        if (!call || call.id !== id) return;
+        if (st === "connected") { setLink(""); if (!reported && p2p) { reported = true; diag("Phone: video link connected via " + (await p2p.route())); } }
+        else if (st === "retrying") { setLink(t("linkConn")); diag("Phone: link dropped, retrying"); }
+        else if (st === "slow" || st === "failed") { setLink(t("linkFail"), true); diag("Phone: video link " + st); }
+      },
     });
     $("#b-cam").setAttribute("aria-pressed", String(video && !!stream && stream.getVideoTracks().length > 0));
     startCaptions();
@@ -608,7 +619,13 @@
   function attachRemote(stream) {
     let a = document.getElementById("a-remote");
     if (!a) { a = document.createElement("audio"); a.id = "a-remote"; a.autoplay = true; a.setAttribute("playsinline", ""); document.body.appendChild(a); }
-    if (a.srcObject !== stream) { a.srcObject = stream; a.play().catch(() => {}); }
+    if (a.srcObject !== stream) {
+      a.srcObject = stream;
+      a.play().catch(() => {
+        if ($("#tap-hear")) return;
+        $("#call-body").prepend(h("button.btn.btn--primary.btn--block", { type: "button", id: "tap-hear", onclick: (e) => { a.play().catch(() => {}); e.currentTarget.remove(); } }, t("tapHear")));
+      });
+    }
     if (stream.getVideoTracks().length && !$("#remote video")) {
       const v = document.createElement("video"); v.autoplay = true; v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = stream;
       clear($("#remote")); $("#remote").appendChild(v); $("#remote").hidden = false; $("#avatar").hidden = true; v.play().catch(() => {});
@@ -643,6 +660,8 @@
   function showRing(lc, s) {
     const wrap = $("#ring"); ringLc = lc; ringState = s;
     if (wrap.hidden) {
+      if (notice && notice.open) notice.close(); // an incoming call from the control room comes first
+      document.querySelectorAll("dialog[open]").forEach((d) => { try { d.close(); } catch (e) { /* ok */ } });
       wrap.hidden = false; announce(t("ringT"));
       $("#ring-sub").textContent = s.ring_mode === "video" ? t("liveVideo") : t("liveVoice");
       if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
@@ -650,9 +669,11 @@
     }
   }
   function hideRing() { clearInterval(ringBeep); ringBeep = null; $("#ring").hidden = true; ringLc = null; }
+  const callIdle = () => !call || call.state === "ended" || call.state === "failed";
   async function acceptRing() {
     const lc = ringLc, s = ringState; hideRing();
-    if (!lc || callOpen) return;
+    if (!lc || (callOpen && !callIdle())) return;
+    clearInterval(pollTimer); clearInterval(tickTimer); stopCallRecording(); leaveVideo();
     try { await api(`/api/c/call/${lc.id}/ring/answer`, { body: { t: lc.ctoken } }); } catch (e) { toast(t("ringGone")); return; }
     setCallScreen(true);
     call = { id: lc.id, ctoken: lc.ctoken, ref: lc.ref, mode: s.ring_mode, state: "ringing", lines: 0, answeredAt: 0, transport: "p2p", point: null };
@@ -671,16 +692,19 @@
   $("#cb-call").addEventListener("click", () => { cbDismissed = "x"; $("#cb-banner").hidden = true; startCall("voice"); });
 
   async function idlePoll() {
-    if (callOpen || document.hidden) return;
+    if ((callOpen && !callIdle()) || document.hidden) return;
     const lc = lastCall(); if (!lc) { hideRing(); return; }
     let s; try { s = await api(`/api/c/call/${lc.id}/state?t=${encodeURIComponent(lc.ctoken)}`); } catch (e) { return; }
     if (s.ring_state === "ringing") showRing(lc, s); else if (ringLc) hideRing();
+    if (callOpen) return; // the call screen is open: only the ring above matters
     const showBanner = s.state === "ended" && s.missed && s.ring_state !== "ringing" && s.callback_requested && cbDismissed !== lc.id + (s.ring_state || "");
     $("#cb-banner").hidden = !showBanner;
     const lcCard = $("#last-call");
     if (s.state === "ended") { lcCard.hidden = false; renderOutcome($("#lc-body"), s.case); } else lcCard.hidden = true;
   }
-  setInterval(idlePoll, 3000); setTimeout(idlePoll, 800);
+  setInterval(idlePoll, 2000); setTimeout(idlePoll, 600);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) idlePoll(); });
+  window.addEventListener("focus", idlePoll); window.addEventListener("online", idlePoll);
 
   // ---- Twilio Video (real voice and video) when the service has it switched on
   let videoLoading = null;
@@ -731,20 +755,30 @@
     pubs.forEach((pub) => { if (pub.track) { enabled ? pub.track.enable() : pub.track.disable(); } });
   }
   // Live captions use the browser's own speech recognition when it exists. They may be inaccurate.
+  const isPhone = () => !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
   function startCaptions() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR || recog) return;
+    // On a phone the microphone is already busy carrying the call. Listening to it a second time can cut the sound or freeze the screen.
+    if (call && call.transport === "p2p" && isPhone()) return;
     recog = new SR(); recog.continuous = true; recog.interimResults = true; recog.lang = "en-ZA";
-    let last = 0;
+    let last = 0, fast = 0, startedAt = 0;
+    recog.onstart = () => { startedAt = Date.now(); };
     recog.onresult = (ev) => {
       const res = ev.results[ev.results.length - 1];
       const text = res[0].transcript;
       const now = Date.now();
-      if (!res.isFinal && now - last < 600) return; // show what is being said about twice a second
+      if (!res.isFinal && now - last < 1500) return;
       last = now;
       if (call && call.id) api(`/api/c/call/${call.id}/line`, { body: { t: call.ctoken, text, src: "caption", partial: !res.isFinal } }).catch(() => {});
     };
-    recog.onend = () => { if (recog && call && call.state === "connected") try { recog.start(); } catch (e) { /* already running */ } };
+    recog.onerror = (e) => { if (e && ["not-allowed", "service-not-allowed", "audio-capture"].includes(e.error)) { const r = recog; recog = null; try { r.stop(); } catch (x) { /* ok */ } } };
+    recog.onend = () => {
+      if (!(recog && call && call.state === "connected")) return;
+      fast = Date.now() - startedAt < 1500 ? fast + 1 : 0;
+      if (fast >= 3) { recog = null; return; } // it keeps stopping at once: give up rather than loop
+      setTimeout(() => { try { if (recog) recog.start(); } catch (e) { /* already running */ } }, 500);
+    };
     try { recog.start(); } catch (e) { recog = null; }
   }
   function stopCaptions() { if (recog) { const r = recog; recog = null; try { r.stop(); } catch (e) { /* ok */ } } }

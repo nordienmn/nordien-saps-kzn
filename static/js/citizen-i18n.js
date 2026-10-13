@@ -73,6 +73,7 @@ window.CITIZEN_I18N = {
     pName: "Name", pMobile: "Mobile number", pAddr: "Address or area", pPhoto: "Photo", pTake: "Take a photo", pRetake: "Take another", pPhotoHint: "A selfie helps the desk know who is calling.",
     pSave: "Save profile", pSaved: "Profile saved on this phone", pClear: "Remove profile", pCleared: "Profile removed", pNeed: "Add your name and a mobile number.",
     // call
+    linkConn: "Connecting audio and video…", linkOk: "Connected", linkFail: "The picture could not connect. You can keep typing to the officer, or hang up and call again.", tapHear: "Tap to hear the officer",
     liveVoice: "Live voice", liveVideo: "Live video", whoIn: "SAPS KZN Control Room is calling you",
     ringT: "SAPS KZN Control Room is calling you", ringB: "Answer to speak to an officer now.", ringAns: "Answer", ringDecl: "Decline", ringGone: "That call has ended.",
     cbT: "We missed your call", cbB: "The control room tried to reach you. Tap to call again.", cbBtn: "Call now",
@@ -171,6 +172,7 @@ window.CITIZEN_I18N = {
     pT: "Iphrofayela yami", pLede: "Akuphoqelekile. Igcinwa kule foni kuphela. Yengezwa emibikweni yakho uma ukhetha.",
     pName: "Igama", pMobile: "Inombolo yefoni", pAddr: "Ikheli noma indawo", pPhoto: "Isithombe", pTake: "Thatha isithombe", pRetake: "Thatha esinye", pPhotoHint: "I-selfie isiza ihhovisi ukwazi ukuthi ubani ushayelayo.",
     pSave: "Gcina iphrofayela", pSaved: "Iphrofayela igcinwe kule foni", pClear: "Susa iphrofayela", pCleared: "Iphrofayela isusiwe", pNeed: "Faka igama nenombolo yefoni.",
+    linkConn: "Iyaxhuma umsindo nevidiyo…", linkOk: "Kuxhumile", linkFail: "Isithombe asikwazanga ukuxhuma. Ungaqhubeka ubhalela iphoyisa, noma uvale ushaye futhi.", tapHear: "Thinta ukuze uzwe iphoyisa",
     liveVoice: "Izwi eliphilayo", liveVideo: "Ividiyo ephilayo", whoIn: "Ihhovisi Lokulawula le-SAPS KZN likushayela",
     ringT: "Ihhovisi Lokulawula le-SAPS KZN likushayela", ringB: "Phendula ukuze ukhulume nephoyisa manje.", ringAns: "Phendula", ringDecl: "Yenqaba", ringGone: "Leyo kholi iphelile.",
     cbT: "Besiphuthelwe yikholi yakho", cbB: "Ihhovisi lokulawula lizamile ukukuthinta. Thinta ukuze ushaye futhi.", cbBtn: "Shaya manje",

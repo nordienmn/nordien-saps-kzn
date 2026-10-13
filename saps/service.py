@@ -25,9 +25,9 @@ MAX_NOTE = 2000
 MAX_TRANSCRIPT_LINES = 300
 CALL_LIMIT_S = 60       # demo rule: a live call or video lasts one minute
 RING_LIMIT_S = 90       # an unanswered call is closed after this long
-DROP_S = 20             # a live call whose caller has not been heard from for this long is treated as dropped
+DROP_S = 40             # a live call whose caller has not been heard from for this long is treated as dropped
 MISSED_KEEP_S = 24 * 3600  # a missed call stays on every desk until it is returned, up to a day
-RING_APP_S = 45         # a call-back that rings the caller's app is given up after this long
+RING_APP_S = 60         # a call-back that rings the caller's app is given up after this long
 SAST = timezone(timedelta(hours=2))
 _SEEN = {}              # case id -> last time the caller's app checked in (memory only, one worker)
 MAX_PHOTO_BYTES = 250_000
@@ -758,6 +758,19 @@ def citizen_answer_ring(store, case_id, ctoken):
     sig_reset(case_id)
     _SEEN[case_id] = now()
     return out
+
+
+def call_diag(store, case_id, who, msg):
+    """A short note about how the live link is doing, kept on the call record so a failed call can be understood afterwards."""
+    msg = clean(msg, 140)
+    if not msg:
+        return
+
+    def fn(c):
+        if sum(1 for e in c["timeline"] if e.get("kind") == "diag") < 30:
+            c["timeline"].append({"at": now(), "actor": who, "text": msg, "kind": "diag"})
+
+    store.patch("cases", case_id, fn)
 
 
 def citizen_decline_ring(store, case_id, ctoken):

@@ -380,7 +380,7 @@
       h("div.call-stage__controls", muteB, camB,
         h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => select({ id: c.id, kind: "case" }) }, icon("file"), "Open file"),
         h("button.btn.btn--secondary.btn--sm", { type: "button", onclick: () => endLive(c) }, icon("end-call"), "End call")));
-    const local = await window.SAPS_P2P.localMedia(video);
+    const local = await window.SAPS_P2P.localMedia(video, 8000);
     if (S.stage !== stage) { if (local) local.getTracks().forEach((t) => t.stop()); return; }
     stage.local = local;
     if (!local) toast("Your microphone is blocked. You can hear the caller but they cannot hear you. Type in the file.", "error");
@@ -395,7 +395,10 @@
       onTrack: (remote) => {
         let a = document.getElementById("a-remote");
         if (!a) { a = document.createElement("audio"); a.id = "a-remote"; a.autoplay = true; a.setAttribute("playsinline", ""); document.body.appendChild(a); }
-        if (a.srcObject !== remote) { a.srcObject = remote; a.play().catch(() => {}); }
+        if (a.srcObject !== remote) {
+          a.srcObject = remote;
+          a.play().catch(() => { if (!document.getElementById("tap-hear")) box.prepend(h("button.btn.btn--primary", { type: "button", id: "tap-hear", onclick: (e) => { a.play().catch(() => {}); e.currentTarget.remove(); } }, "Click to hear the caller")); });
+        }
         if (remote.getVideoTracks().length && !remoteBox.querySelector("video")) {
           const v = document.createElement("video"); v.autoplay = true; v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = remote;
           clear(remoteBox); remoteBox.appendChild(v); v.play().catch(() => {});
@@ -403,7 +406,13 @@
         S.recStream = remote;
         if (!S.recorder) setTimeout(() => { if (S.stage === stage && !S.recorder) startRecording(c.id); }, 900);
       },
-      onState: (st) => { state.textContent = { connected: "Connected", connecting: "Connecting", new: "Connecting", checking: "Connecting", failed: "Connection failed", slow: "Still connecting", disconnected: "Reconnecting" }[st] || st; state.className = "chip chip--" + (st === "connected" ? "success" : st === "failed" ? "danger" : "neutral"); },
+      onState: async (st) => {
+        if (S.stage !== stage) return;
+        if (st === "connected" && !stage.reported) { stage.reported = true; call(`/api/staff/case/${c.id}/diag`, { msg: "Desk: video link connected via " + (await stage.p2p.route()) }).catch(() => {}); }
+        if (st === "failed" || st === "slow") call(`/api/staff/case/${c.id}/diag`, { msg: "Desk: video link " + st }).catch(() => {});
+        if (st === "slow" || st === "failed") wait.textContent = "The picture could not connect. The caller can still type to you here, and you can type back.";
+        state.textContent = { connected: "Connected", connecting: "Connecting", new: "Connecting", checking: "Connecting", failed: "Connection failed", slow: "Still connecting", disconnected: "Reconnecting", retrying: "Reconnecting" }[st] || st; state.className = "chip chip--" + (st === "connected" ? "success" : st === "failed" ? "danger" : "neutral");
+      },
     });
     startCaptions(c.id);
   }
@@ -465,9 +474,16 @@
     if (!SR || S.recog || !(forId || S.sel)) return;
     const id = forId || S.sel.id;
     S.recog = new SR(); S.recog.continuous = true; S.recog.interimResults = true; S.recog.lang = "en-ZA";
-    let last = 0;
-    S.recog.onresult = (ev) => { const r = ev.results[ev.results.length - 1]; const n = Date.now(); if (!r.isFinal && n - last < 600) return; last = n; call(`/api/staff/case/${id}/line`, { text: r[0].transcript, src: "caption", partial: !r.isFinal }).catch(() => {}); };
-    S.recog.onend = () => { if (S.recog) try { S.recog.start(); } catch (e) { /* running */ } };
+    let last = 0, fast = 0, startedAt = 0;
+    S.recog.onstart = () => { startedAt = Date.now(); };
+    S.recog.onresult = (ev) => { const r = ev.results[ev.results.length - 1]; const n = Date.now(); if (!r.isFinal && n - last < 1500) return; last = n; call(`/api/staff/case/${id}/line`, { text: r[0].transcript, src: "caption", partial: !r.isFinal }).catch(() => {}); };
+    S.recog.onerror = (e) => { if (e && ["not-allowed", "service-not-allowed", "audio-capture"].includes(e.error)) { const r = S.recog; S.recog = null; try { r.stop(); } catch (x) { /* ok */ } } };
+    S.recog.onend = () => {
+      if (!S.recog) return;
+      fast = Date.now() - startedAt < 1500 ? fast + 1 : 0;
+      if (fast >= 3) { S.recog = null; return; }
+      setTimeout(() => { try { if (S.recog) S.recog.start(); } catch (e) { /* running */ } }, 500);
+    };
     try { S.recog.start(); } catch (e) { S.recog = null; }
   }
 
@@ -483,6 +499,9 @@
     try {
       const d = await api(sel.kind === "tip" ? `/api/staff/tip/${sel.id}` : `/api/staff/case/${sel.id}`);
       if (!S.sel || S.sel.id !== sel.id) return;
+      const sig = JSON.stringify(d);
+      if (quiet && sig === S.detailSig && S.detail) return;
+      S.detailSig = sig;
       S.detail = d;
       renderCase(quiet);
     } catch (e) { if (!quiet) showError(e.message); }
@@ -497,7 +516,10 @@
   function renderCase(quiet) {
     const root = $("casefile");
     const keepY = quiet ? window.scrollY : 0;
-    const keepChat = $("chat-in") ? $("chat-in").value : "";
+    const chatEl = $("chat-in");
+    const keepChat = chatEl ? chatEl.value : "";
+    const chatFocus = !!chatEl && document.activeElement === chatEl;
+    const chatPos = chatEl ? chatEl.selectionStart : 0;
     clear(root);
     if (mapInst) { try { mapInst.remove(); } catch (e) { /* ok */ } mapInst = null; }
     const d = S.detail;
@@ -553,6 +575,7 @@
     drawMap(d);
     if (quiet) window.scrollTo(0, keepY);
     if ($("chat-in") && keepChat) $("chat-in").value = keepChat;
+    if ($("chat-in") && chatFocus) { $("chat-in").focus({ preventScroll: true }); try { $("chat-in").setSelectionRange(chatPos, chatPos); } catch (e) { /* ok */ } }
   }
 
   function renderLocked(root, c) {

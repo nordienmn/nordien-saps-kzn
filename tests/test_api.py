@@ -788,3 +788,14 @@ def test_board_is_alerted_to_a_missed_call_not_returned(client):
     client.store.patch("cases", cid, lambda c: c["call"].update(ended_at=time.time() - 400))
     feed = client.get("/api/staff/feed").json
     assert any(a["type"] == "missed_call" and a["id"] == cid for a in feed["attention"])
+
+
+def test_call_link_notes_are_kept_on_the_call_record(client):
+    start = client.post("/api/c/call/start", json={"mode": "video"}).json
+    cid, t = start["id"], start["ctoken"]
+    assert client.post(f"/api/c/call/{cid}/diag", json={"t": t, "msg": "Phone: video link connected via relay"}).status_code == 200
+    assert client.post(f"/api/c/call/{cid}/diag", json={"t": "wrong", "msg": "x"}).status_code == 404
+    login(client, section="call_centre")
+    assert client.post(f"/api/staff/case/{cid}/diag", json={"msg": "Desk: video link failed"}).status_code == 200
+    notes = [e["text"] for e in client.store.get("cases", cid)["timeline"] if e.get("kind") == "diag"]
+    assert notes == ["Phone: video link connected via relay", "Desk: video link failed"]

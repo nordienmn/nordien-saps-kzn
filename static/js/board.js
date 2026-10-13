@@ -426,7 +426,7 @@
     clear(box);
     box.appendChild(h("div.kpis", { style: "grid-template-columns: repeat(7, minmax(0, 1fr))" }, ...[["Calls", s.calls], ["Answered", s.answered], ["Missed", s.missed], ["Dropped", s.dropped], ["Not yet returned", s.not_returned], ["Average length", mmss(s.avg_duration)], ["Answered in 30 s", s.answered_30s_pct + "%"]].map(([l, v]) =>
       h("div.kpi", h("p.kpi__label", { text: l }), h("p.kpi__value.num", { text: String(v) })))));
-    if (s.wrap_missing) box.appendChild(h("p.muted.text-sm", { text: s.wrap_missing + " answered call" + (s.wrap_missing === 1 ? " has" : "s have") + " no nature or action recorded yet. Operators add them in the call file." }));
+    if (s.wrap_missing) box.appendChild(h("p.muted.text-sm", { style: "margin:var(--space-3) 0", text: s.wrap_missing + " answered call" + (s.wrap_missing === 1 ? " has" : "s have") + " no nature or action recorded yet. Operators add them in the call file." }));
     if (!r.rows.length) { box.appendChild(h("div.state", h("span.state__icon", icon("phone", "icon--lg")), h("p.state__title", { text: "No calls in this period" }))); return; }
     const resultChip = (x) => h("span.chip.chip--dot.chip--" + (x.result === "Answered" ? "success" : x.returned ? "neutral" : "warning"), { text: x.result + (x.result !== "Answered" && x.returned ? " (returned)" : "") });
     box.appendChild(h("div.table-wrap", h("table.matrix",
@@ -435,10 +435,10 @@
         h("th", { scope: "row", text: x.ref }),
         h("td", { text: (CL.day === "today" ? "" : dayStamp(x.started_at) + " ") + clock(x.started_at) }),
         h("td.num", { text: x.duration != null ? mmss(x.duration) : "-" }),
-        h("td", { text: x.operator || "-" }),
-        h("td", x.nature ? h("span", { text: x.nature }) : h("span.chip.chip--warning", { text: x.result === "Missed" ? "No call taken" : "Not recorded" })),
-        h("td", { text: x.action || "None recorded" }),
-        h("td", resultChip(x))))))));
+        h("td", { style: "text-align:left", text: x.operator || "-" }),
+        h("td", { style: "text-align:left" }, x.nature ? h("span", { text: x.nature }) : h("span.chip.chip--warning", { text: x.result === "Missed" ? "No call taken" : "Not recorded" })),
+        h("td", { style: "text-align:left", text: x.action || "None recorded" }),
+        h("td", { style: "text-align:left" }, resultChip(x))))))));
   }
 
   const SH = { q: "", since: "", page: 1, timer: null };

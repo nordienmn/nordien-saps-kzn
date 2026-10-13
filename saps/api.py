@@ -117,6 +117,16 @@ def call_ring_decline(cid):
     return jsonify({"ok": True})
 
 
+@bp.post("/c/call/<cid>/diag")
+def call_diag_post(cid):
+    data = body()
+    case = store().get("cases", cid)
+    if not service._ctoken_ok(case, data.get("t")):
+        return jsonify({"error": "Call not found."}), 404
+    service.call_diag(store(), cid, "phone", data.get("msg"))
+    return jsonify({"ok": True})
+
+
 @bp.post("/c/call/<cid>/signal")
 def call_signal_post(cid):
     data = body()
@@ -465,6 +475,15 @@ def staff_face(cid):
     resp = send_file(io.BytesIO(found[1]), mimetype=found[0], max_age=0)
     resp.headers["Cache-Control"] = "private, max-age=120"
     return resp
+
+
+@bp.post("/staff/case/<cid>/diag")
+@security.login_required("desk")
+def staff_diag(cid):
+    if (g := _case_gate(cid)):
+        return g
+    service.call_diag(store(), cid, "desk", body().get("msg"))
+    return jsonify({"ok": True})
 
 
 @bp.post("/staff/case/<cid>/signal")
